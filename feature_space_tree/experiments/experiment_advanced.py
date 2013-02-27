@@ -48,6 +48,7 @@ import yaml
 import sys
 import shutil
 import re
+import shelve
 
 #print sys.path
 
@@ -229,6 +230,12 @@ def main_function():
             #print "matrix_test: " + str(e.get_matrix_test())
         print "================================================\n\n"
     #===========================================================================
+    
+    shelf = shelve.open("tree.dat", protocol=1)
+    
+    shelf["tree"]=root
+    
+    shelf.close()
 
     corpora = representations.Corpora(config_base.experiment_base_path)
     corpora.generate()

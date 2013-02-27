@@ -66,7 +66,8 @@ class EnumDecoratorByTokenNormalizer(object):
      ORIENTATION_NEIGHBORING_BIGRAMS,
      NEIGHBORING_NO_ORDER_BIGRAMS,
      NEIGHBORING_NO_ORDER_TRIGRAMS, 
-     NEIGHBORING_NO_ORDER_TETRAGRAMS) = range(10)
+     NEIGHBORING_NO_ORDER_TETRAGRAMS,
+     SKIP_SIZE_INFO) = range(11)
      
 
 class FactorySimpleDecoratorByTokenNormalizer(object):
@@ -104,4 +105,7 @@ class FactorySimpleDecoratorByTokenNormalizer(object):
         
         if option == EnumDecoratorByTokenNormalizer.NEIGHBORING_NO_ORDER_TETRAGRAMS:
             return NeighboringNoOrderTetragramsFilterDecoratorByTokenNormalizer(by_token_normalizer)
+        
+        if option == EnumDecoratorByTokenNormalizer.SKIP_SIZE_INFO:
+            return SkipSizeInfoFilterDecoratorByTokenNormalizer(by_token_normalizer)
         
