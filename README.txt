@@ -6,13 +6,14 @@ Author: Adrian Pastor Lopez-Monroy, M.Sc., <pastor@ccc.inaoep.mx>
         Department of Computer Science,
         Instituto Nacional de Astrofísica, Óptica y Electrónica
 
-Copyright (C) 2011-2012 FeatureSpaceTree Project
+Copyright (C) 2011-2013 FeatureSpaceTree Project
 For license information, see LICENSE.txt
 
 Welcome to FeatureSpaceTree,
 
 I created FeatureSpaceTree because I wanted an easy way to perform
-text-preprocessing in text-classification tasks.
+text-preprocessing in text-classification or others specific tasks related to
+machine learning and text-mining.
 
 FeatureSpaceTree is a framework for scientists and students of computer science
 that facilitates the textual-feature-extraction and representation of documents.
@@ -25,8 +26,15 @@ modules directly in a scripting programming language (e.g. perl, python),
 especially when the task is small. Other times we use some libraries that
 provide many of the common functions (e.g. NLTK, Apache UIMA). These last tools
 are the big boys of Natural Language Processing. However, the learning curve
-can be scared, and normally we ended assembling the union of several components
+could be hard, and normally we ended assembling the union of several components
 and witring a lot of lines of code.
+
+In some cases we are missed a tool like weka, but for text-mining. Where you 
+just select some things and parameters in order to prove and idea, or be able 
+to extend a class and add your new method. This is, sometimes we would like to 
+test ideas in a very fast way in order to know if it deserves our attention. 
+Well, FeatureSpaceTree aims to be something like that. Of course, currently it
+is far from that goal, but I think that every day it is closer. 
 
 FeatureSpaceTree aims to be a tool for feature-extraction and representation of
 documents. The main idea is just stating what features you want to extract and
@@ -49,6 +57,16 @@ $ sudo pip install git+https://github.com/beiceman/FeatureSpaceTree.git#egg=Feat
 If no errors, then congratulations you can use FeatureSpaceTree:
 
 $ simple_exp yaml_file_with_parameters.yaml
+
+KNOWN BUGS
+==========
+
+An error in first the execution surely will appear. This is related to the path
+of the dir nltk_data, which should be installed in you home directory (if you
+follow installation instruction for the book material of the NLTK framework). 
+This path in the source code representations.py has my path, which is:
+(/home/aplm/nltk_data/...), you should change this line with your path, in 
+order to use FeatureSpaceTree.  
 
 
 INTRODUCTION
