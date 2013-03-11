@@ -36,6 +36,7 @@ import random
 import re
 import time
 import numpy
+import scipy.sparse
 import shelve
 import glob
 import codecs
@@ -288,6 +289,16 @@ class Util(object):
 #        f_arff = open(path, 'w')
 #        f_arff.write(string_arff.encode('utf-8'))
 #        f_arff.close()
+
+    @staticmethod
+    def write_bin_matrix(path, attributes, categories, matrix, name_files, relation_name="my_relation"):
+        
+        categories_of_files = [re.match('(.+)/.+', name_file).group(1)
+                               for name_file in name_files ]
+        
+        numpy.save(path + "_cats.npy", numpy.array(categories_of_files))
+        
+        numpy.save(path + "_data.npy", matrix)
 
     @staticmethod
     def write_svmlib(path, attributes, categories, matrix, name_files, relation_name="my_relation"):
@@ -617,6 +628,18 @@ class FactoryInfoClasses(object):
                                corpus_file_list, tokens_path)
 
 
+class VirtualCategory2(object):
+
+    def __init__(self, author, num_tokens_cat, fd_vocabulary_cat,
+                 cat_file_list, dic_file_tokens, dic_file_fd):
+        self.author = author
+        self.num_tokens_cat = num_tokens_cat
+        self.fd_vocabulary_cat = fd_vocabulary_cat
+        self.cat_file_list = cat_file_list
+        self.dic_file_tokens = dic_file_tokens
+        self.dic_file_fd = dic_file_fd
+        
+        
 class VirtualCategory(object):
 
     def __init__(self, author, num_tokens_cat, fd_vocabulary_cat,
@@ -1231,7 +1254,16 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         print "inicio CSA..."
 
         matrix_concepts_terms = numpy.zeros((len(space.categories), len(space._vocabulary)),
-                                 dtype=numpy.float64)
+                                            dtype=numpy.float64)
+        
+        #matrix_concepts_terms = scipy.sparse.lil_matrix(numpy.zeros((len(space.categories), len(space._vocabulary)),
+        #                                                            dtype=numpy.float64))
+        
+        #matrix_concepts_terms = scipy.sparse.lil_matrix(numpy.zeros((len(space.categories), len(space._vocabulary)), 
+        #                                                            dtype=numpy.float64))
+
+        
+        
 
         i = 0
         for author in space.categories:
@@ -1252,8 +1284,12 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         #                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
                         #print pal + " : "+ str(docActualFd[pal]) + " tamDoc:" +  str(float(tamDoc))
                         freq = math.log((1.0 + docActualFd[pal] / float(1.0 + tamDoc)), 2)
-                        if freq == 0.0:
-                            freq=0.00000001
+                        
+                        ##########################################
+                        # if freq == 0.0:
+                        #     freq=0.00000001
+                        ##########################################
+                        
                         #print str(freq) + " despues"
                     else:
                         freq = 0
@@ -1631,6 +1667,7 @@ class Report(object):
         
         if is_root:
             self.create_arrfs(space)
+            self.create_bin_matrices(space)
             
         self.create_properties_files(space)
 
@@ -1666,6 +1703,21 @@ class Report(object):
 
         test_arrf_path = "%s/test_subspace%s_%s.arff" % (space.space_path, space.id_space, self.experiment_name)
         Util.write_arrf(test_arrf_path,
+                        space.get_attributes(),
+                        space.get_categories(),
+                        space.get_matrix_test(),
+                        space.get_test_files())
+        
+    def create_bin_matrices(self, space):
+        train_bin_path = "%s/train_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
+        Util.write_bin_matrix(train_bin_path,
+                        space.get_attributes(),
+                        space.get_categories(),
+                        space.get_matrix_train(),
+                        space.get_train_files())
+
+        test_bin_path = "%s/test_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
+        Util.write_bin_matrix(test_bin_path,
                         space.get_attributes(),
                         space.get_categories(),
                         space.get_matrix_test(),
