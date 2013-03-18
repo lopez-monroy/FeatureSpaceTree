@@ -320,6 +320,120 @@ class VocabularyVirtualProcessor(VirtualProcessor):
         self.virtual_elements = []
 
         for kwargs_term in kwargs_terms:
+            
+            # ==================================================================
+            # This part compute the vocabulary for masive datasets.
+            # First of all we save the original source            
+            tmp_source = kwargs_term["source"]
+            
+            # the max number of documents to process. This determines how much
+            # iterations we will perform (parts).
+            max=5000
+            parts = len(kwargs_term["source"])/max
+            
+            #ensure at least one iteration
+            if parts == 0:
+                parts = 1
+            
+            a=0
+            b=1
+            
+            # huge vocabularies will be save in several "local" elements
+            virtual_elements_local= []
+            for i in range(parts):
+                
+                if i == range(parts)[-1]:
+                    kwargs_term["source"] = tmp_source[a*max:]
+                else:
+                    kwargs_term["source"] = tmp_source[a*max:b*max]
+                
+                a+=1
+                b+=1
+                              
+                # 1.- get all the terms of the current part of documents
+                print i,"SUBSTEP: 1"          
+                term = \
+                self._factory_term_lex.build_tokens(kwargs_term['type_term'],
+                                                     kwargs_term)
+                
+                # 2.- convert those terms into a dict
+                print i,"SUBSTEP: 2"    
+                vocabulary_object_local = VocabularyRaw(nltk.FreqDist(term.tokens))
+                
+                # 3.- apply all filters
+                print i,"SUBSTEP: 3"    
+                #filtered_vocabulary_local = \
+                #Util.decorate_vocabulary_object(vocabulary_object_local,
+                #                                 kwargs_term['filters_terms'])
+                
+                # 4.- get the final vocabulary
+                print i,"SUBSTEP: 4"    
+                fdist_local = vocabulary_object_local.get_fdist_selected()
+                
+                # 5.- store as a VirtualVocabulary object
+                print i,"SUBSTEP: 5"    
+                virtual_elements_local += [VirtualVocabulary(kwargs_term, fdist_local)]
+                print "unfiltered local vocabulary size: ",len(fdist_local)
+                
+            
+            # Here we will join all "local" vocabularies    
+            print i,"SUBSTEP: 6"            
+            fdist = nltk.FreqDist()
+            for virtual_vocabulary_local in virtual_elements_local:
+    
+                for token in virtual_vocabulary_local.fdist:
+    
+                    if token in fdist:
+                        fdist[token] += virtual_vocabulary_local.fdist[token]
+                    else:
+                        fdist[token] = virtual_vocabulary_local.fdist[token]
+            
+            print "unfiltered vocabulary size: ", len(fdist)            
+            kwargs_term["source"] = tmp_source
+            vocabulary_object = VocabularyRaw(fdist)
+            filtered_vocabulary = \
+            Util.decorate_vocabulary_object(vocabulary_object,
+                                             kwargs_term['filters_terms'])
+            fdist = filtered_vocabulary.get_fdist_selected()
+                        
+            self.virtual_elements += [VirtualVocabulary(kwargs_term, fdist)]
+
+        # ======================================================================
+
+        # ======================================================================
+        # This block computes the fdist of all of the virtual_elements and 
+        # creates a new one that includes all.
+        # ======================================================================
+        
+        print "SUPRASTEP: 7"
+        fdist = nltk.FreqDist()
+        for virtual_vocabulary in self.virtual_elements:
+
+            for token in virtual_vocabulary.fdist:
+
+                if token in fdist:
+                    fdist[token] += virtual_vocabulary.fdist[token]
+                else:
+                    fdist[token] = virtual_vocabulary.fdist[token]
+
+        #print "SSSSSSSSSS:" +str(fdist)
+
+        print "SUBSTEP: 8"
+        self.fdist = fdist
+        self.vocabulary = self.fdist.keys()
+        # ======================================================================
+
+class VocabularyVirtualProcessor_bak(VirtualProcessor):
+
+    def __init__(self, kwargs_terms):
+        super(VocabularyVirtualProcessor, self).__init__()
+
+        # ======================================================================
+        # Produce the individual filtered VirtualTerms, storing them into a list
+        # ======================================================================
+        self.virtual_elements = []
+
+        for kwargs_term in kwargs_terms:
 
             term = \
             self._factory_term_lex.build_tokens(kwargs_term['type_term'],
@@ -356,8 +470,7 @@ class VocabularyVirtualProcessor(VirtualProcessor):
         self.fdist = fdist
         self.vocabulary = self.fdist.keys()
         # ======================================================================
-
-
+        
 class VirtualElement(object):
 
     def __init__(self, kwargs_term):

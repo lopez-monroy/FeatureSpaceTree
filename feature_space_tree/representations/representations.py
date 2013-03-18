@@ -37,9 +37,12 @@ import re
 import time
 import numpy
 import scipy.sparse
+import collections
+import copy
 import shelve
 import glob
 import codecs
+import yaml
 from abc import ABCMeta, abstractmethod
 
 import nltk
@@ -437,6 +440,33 @@ class Util(object):
         f.close()
 
         return list_of_files
+    
+    
+    @staticmethod
+    def getValidTokens(kwargs_term, fdist):
+        factory_term_lex = FactoryTermLex()
+        valid_tokens = []
+
+        term = factory_term_lex.build_tokens(kwargs_term['type_term'], kwargs_term)
+        valid_tokens += term.tokens
+        #print "vocabulary: " + str(len(vocabulary))
+        #local_vocabulary = set(vocabulary) & set(valid_tokens)
+        #print "local vocabulary: " + str(len(local_vocabulary))
+        valid_tokens = [token for token in valid_tokens if token in fdist]
+        return valid_tokens
+    
+    @staticmethod
+    def getValidTokens_bak(kwargs_term, vocabulary):
+        factory_term_lex = FactoryTermLex()
+        valid_tokens = []
+
+        term = factory_term_lex.build_tokens(kwargs_term['type_term'], kwargs_term)
+        valid_tokens += term.tokens
+        #print "vocabulary: " + str(len(vocabulary))
+        local_vocabulary = set(vocabulary) & set(valid_tokens)
+        #print "local vocabulary: " + str(len(local_vocabulary))
+        valid_tokens = [token for token in valid_tokens if token in local_vocabulary]
+        return valid_tokens
 
 
 class EnumFiltersCorpus(object):
@@ -620,28 +650,182 @@ class FullFilesCorpus(FilterCorpus):
 class FactoryInfoClasses(object):
 
     @staticmethod
-    def crear(authors, corpus, token_type, kwargs, vocabulary,
+    def crear(authors, corpus, token_type, kwargs, fdist,
               corpus_file_list, tokens_path, style="NORMAL"):
 
         if style == "NORMAL":
-            return VirtualCategoriesHolder(authors, corpus, token_type, kwargs, vocabulary,
+            return VirtualCategoriesHolder(authors, corpus, token_type, kwargs, fdist,
                                corpus_file_list, tokens_path)
 
+            
+class TransformedDict(collections.MutableMapping):
+    """A dictionary which applies an arbitrary key-altering function before accessing the keys"""
 
-class VirtualCategory2(object):
+    def __init__(self, *args, **kwargs):
+        self.store = dict()
+        self.update(dict(*args, **kwargs)) # use the free update to set keys
+        
+    def set_kwargs_terms(self, kwargs_terms):
+        self._kwargs_terms = kwargs_terms
+        
+    def set_corpus(self, corpus):
+        self._corpus = corpus
+    
+    def set_fdist(self, fdist):
+        self._fdist = fdist
 
-    def __init__(self, author, num_tokens_cat, fd_vocabulary_cat,
-                 cat_file_list, dic_file_tokens, dic_file_fd):
-        self.author = author
-        self.num_tokens_cat = num_tokens_cat
-        self.fd_vocabulary_cat = fd_vocabulary_cat
-        self.cat_file_list = cat_file_list
-        self.dic_file_tokens = dic_file_tokens
-        self.dic_file_fd = dic_file_fd
+    def __getitem__(self, key):            
+        #return self.store[self.__keytransform__(key)]
+        file_path = self.store[self.__keytransform__(key)]
+        list_file_tokens_combined = []
+        for kwargs_term in self._kwargs_terms:
+            kwargs_term['string'] = ''
+            kwargs_term['source'] = [file_path]
+            kwargs_term['corpus'] = self._corpus
+
+            list_file_tokens_combined += \
+            Util.getValidTokens(kwargs_term, self._fdist)
+            
+        print file_path,": ",list_file_tokens_combined
+            
+        return list_file_tokens_combined     
+
+    def __setitem__(self, key, value):
+        self.store[self.__keytransform__(key)] = value
+
+    def __delitem__(self, key):
+        del self.store[self.__keytransform__(key)]
+
+    def __iter__(self):
+        return iter(self.store)
+
+    def __len__(self):
+        return len(self.store)
+
+    def __keytransform__(self, key):
+        return key
+    
+
+#class MyTransformedDict(TransformedDict):
+#    
+#    def __init__(self):
+#        super(MyTransformedDict, self).__init__()
+#    
+#    def set_kwargs_terms(self, kwargs_terms):
+#        self._kwargs_terms = kwargs_terms
+#        
+#    def set_corpus(self, corpus):
+#        self._corpus = corpus
+#    
+#    def set_vocabulario(self, vocabulary):
+#        self._vocabulary = vocabulary
+#    
+#    def __get_item__(self, key):
+#        file_path = super(MyTransformedDict, self).__get_item__(key)
+#        
+#        list_file_tokens_combined = []
+#        for kwargs_term in self._kwargs_terms:
+#            kwargs_term['string'] = ''
+#            kwargs_term['source'] = [file_path]
+#            kwargs_term['corpus'] = self._corpus
+#
+#            list_file_tokens_combined += \
+#            Util.getValidTokens(kwargs_term, self._vocabulary)
+#            
+#        print file_path,": ",list_file_tokens_combined
+#            
+#        return list_file_tokens_combined     
         
-        
+
 class VirtualCategory(object):
 
+    def __init__(self, author, cat_file_list, dic_file_tokens):
+        self.author = author        
+        self.cat_file_list = cat_file_list
+        self.dic_file_tokens = dic_file_tokens
+        
+class VirtualCategoriesHolder(object):
+    '''
+    The purpouse of this class is to retain all the posible information about
+    each category.
+    Note how this is useful when you want to see things like: the terms and its
+    distribution in each category, or in each file, either in the train corpus
+    or in the test corpus. This can give clues about why or why not things work.
+    '''
+
+    def __init__(self, categories, corpus, kwargs_terms, fdist,
+                 corpus_file_list):
+
+        # DEBUG: print "BUILDING VIRTUALS..."
+        # this is a dictionary that will contain all posible information about
+        # each category.
+        self.virtual_categories = {}
+        # ----------------------------------------------------------------------
+
+        #kwargs_terms["corpus"] = corpus
+
+        for kwargs_term in kwargs_terms:
+                kwargs_term['string'] = ''
+                kwargs_term['corpus'] = corpus
+                kwargs_term['source'] = corpus_file_list
+
+        for category in categories:
+
+            cat_file_list = corpus.fileids(categories=[category])
+            cat_file_list = [f for f in cat_file_list if f in corpus_file_list]
+
+            # ------------------------------------------------------------------
+            # INSPECT: This is to handle the case where exists several files
+            # with the same name through the different categories. For example,
+            # inside the dir "Juan" exists a file named "nota_1.txt" and inside
+            # the dir "Jose" also exists a file named "nota_1.txt".
+            #
+            # cat_file_list = list(set(cat_file_list))
+            #
+            # ------------------------------------------------------------------
+            # SOLVED: Does not matter because the name of the files in the list
+            # are of the form "Juan/nota_1.txt" and "Jose/nota_1.txt" :D
+            # ------------------------------------------------------------------
+
+            cat_file_list.sort()
+
+            # ------------------------------------------------------------------
+            # Initialize the custom dictionary
+            dic_file_tokens = TransformedDict()
+            dic_file_tokens.set_kwargs_terms(kwargs_terms)
+            dic_file_tokens.set_corpus(corpus)
+            dic_file_tokens.set_fdist(fdist)
+            # ------------------------------------------------------------------
+            
+            for author_file in cat_file_list:
+
+                dic_file_tokens[author_file] = author_file
+#                print "**********************************5555"
+#                print author_file
+#                print dic_file_fd[author_file]
+#                print "**********************************5555"
+
+                # DEBUG: print "TOKENS: ", dic_file_tokens[author_file]
+                
+            # Finally constructs the object that hold all our useful information
+            self.virtual_categories[category] = \
+            VirtualCategory(category,
+                            cat_file_list,
+                            dic_file_tokens)
+            # ------------------------------------------------------------------
+
+#            f_tokens = open(tokens_path, 'a')
+#            f_tokens.write("\n" + category + '==============================\n');
+#            temp_vocab_cat = []
+#            # nltk sobreescribe keys() para ordenar
+#            for item in fd_vocabulary_cat.items():
+#                temp_vocab_cat += [str(item)]
+#            #Utilities.writeFancyList(f_tokens, temp_vocab_cat)
+#            f_tokens.close()
+        
+        
+class VirtualCategory_bak(object):
+
     def __init__(self, author, num_tokens_cat, fd_vocabulary_cat,
                  cat_file_list, dic_file_tokens, dic_file_fd):
         self.author = author
@@ -652,7 +836,7 @@ class VirtualCategory(object):
         self.dic_file_fd = dic_file_fd
 
 
-class VirtualCategoriesHolder(object):
+class VirtualCategoriesHolder_bak(object):
     '''
     The purpouse of this class is to retain all the posible information about
     each category.
@@ -1032,18 +1216,35 @@ class AbstractFactoryRepresentation(object):
     @abstractmethod
     def create_matrix_test_holder(self, space):
         pass
+    
+    @abstractmethod
+    def save_train_data(self, space):
+        pass
 
+    @abstractmethod
+    def load_train_data(self, space):
+        pass
 
 class FactoryBOWRepresentation(AbstractFactoryRepresentation):
 
     def create_attribute_header(self, fdist, vocabulary, categories):
         return AttributeHeaderBOW(fdist, vocabulary, categories)
 
-    def create_matrix_train_holder(self, space):
-        return BOWTrainMatrixHolder(space)
+    def create_matrix_train_holder(self, space):        
+        self.__bow_train_matrix_holder = BOWTrainMatrixHolder(space) 
+        return self.__bow_train_matrix_holder 
 
     def create_matrix_test_holder(self,space):
-        return BOWTestMatrixHolder(space)
+        self.__bow_test_matrix_holder = BOWTestMatrixHolder(space) 
+        return self.__bow_test_matrix_holder
+    
+    def save_train_data(self, space):
+        print "ERROR: SERIALIZATION NOT IMPLEMENTED "
+        pass
+
+    def load_train_data(self, space):
+        print "ERROR: SERIALIZATION NOT IMPLEMENTED "
+        pass
 
 
 class FactoryCSARepresentation(AbstractFactoryRepresentation):
@@ -1053,11 +1254,43 @@ class FactoryCSARepresentation(AbstractFactoryRepresentation):
 
     def create_matrix_train_holder(self, space):
         self.__csa_train_matrix_holder = CSATrainMatrixHolder(space)
+        self.__csa_train_matrix_holder.build_matrix()
         return self.__csa_train_matrix_holder
 
     def create_matrix_test_holder(self, space):
         self.__csa_test_matrix_holder = CSATestMatrixHolder(space, self.__csa_train_matrix_holder.get_matrix_terms_concepts())
         return self.__csa_test_matrix_holder
+    
+    def save_train_data(self, space):
+        
+        if self.__csa_train_matrix_holder is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            numpy.save(cache_file + "_mat_terms_concepts.npy", 
+                       self.__csa_train_matrix_holder.get_matrix_terms_concepts())
+            
+            numpy.save(cache_file + "_mat_docs_concepts.npy", 
+                       self.__csa_train_matrix_holder.get_matrix())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.__csa_train_matrix_holder.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.__csa_train_matrix_holder.get_instance_categories())
+        else:
+            print "ERROR: There is not a train matrix terms concepts built"
+            
+    def load_train_data(self, space):
+        
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        self.__csa_train_matrix_holder = CSATrainMatrixHolder(space)        
+        self.__csa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))        
+        self.__csa_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
+        self.__csa_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        self.__csa_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+        
+        return self.__csa_train_matrix_holder      
 
 
 class MatrixHolder(object):
@@ -1089,6 +1322,17 @@ class MatrixHolder(object):
     def get_instance_namefiles(self):
         pass
 
+    @abstractmethod
+    def set_matrix(self, value):
+        pass
+    
+    @abstractmethod
+    def set_instance_categories(self, value):
+        pass
+    
+    @abstractmethod
+    def set_instance_namefiles(self, value):
+        pass
 
 class CSAMatrixHolder(MatrixHolder):
 
@@ -1120,13 +1364,21 @@ class CSAMatrixHolder(MatrixHolder):
         
         instance_categories = []
         instance_namefiles = []
+        
+        ################################################################
+        # SUPER SPEED 
+        len_vocab = len(space._vocabulary)
+        unorder_dict_index = {}
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+        ############################################################### 
 
         k=0
         for author in space.categories:
             archivos = virtual_classes_holder[author].cat_file_list
             for arch in archivos:
                 tokens = virtual_classes_holder[author].dic_file_tokens[arch]
-                docActualFd = virtual_classes_holder[author].dic_file_fd[arch]
+                docActualFd = nltk.FreqDist(tokens) #virtual_classes_holder[author].dic_file_fd[arch]
                 tam_doc = len(tokens)
 
 ######                if len(tokens) == 0:
@@ -1139,15 +1391,32 @@ class CSAMatrixHolder(MatrixHolder):
 ######                    print "***************************************************"
 
                 #self.weight_matrix(space, author, tokens, docActualFd, matrix_concepts_docs, 0, k, matrix_concepts_terms)
-
-                num_term = 0
-                for term in space._vocabulary:
-                    if term in docActualFd:
-                        weigh = (docActualFd[term]/float(tam_doc))
-                        term_vector = matrix_concepts_terms[:,num_term] * weigh
-                        matrix_concepts_docs[:,k] += term_vector
-
-                    num_term += 1
+                ################################################################
+                # SUPER SPEED 
+                for pal in docActualFd:
+                    
+                    if (pal in unorder_dict_index):
+                        weigh = docActualFd[pal] / float(tam_doc)
+                    else:
+                        weigh = 0.0
+                    
+                    term_vector = matrix_concepts_terms[:,unorder_dict_index[pal]] * weigh
+                    matrix_concepts_docs[:,k] += term_vector
+                                        
+                ################################################################
+                
+                ################################################################
+                # VERY SLOW
+                
+#                num_term = 0
+#                for term in space._vocabulary:
+#                    if term in docActualFd:
+#                        weigh = (docActualFd[term]/float(tam_doc))
+#                        term_vector = matrix_concepts_terms[:,num_term] * weigh
+#                        matrix_concepts_docs[:,k] += term_vector
+#
+#                    num_term += 1
+                ###############################################################
 
                 k+=1 # contador de documentos
                 
@@ -1194,7 +1463,7 @@ class CSAMatrixHolder(MatrixHolder):
             if docActualFd[pal] >= 1:
                 i = numTermino
                 for j in range(len(mat_concepts_term)):
-
+                        # OJO ESTA PARTE SOLO FUNCIONA CON num_tokens_cat en los virtuales
                         cc=float(space.virtual_classes_holder_train[elemAutor].num_tokens_cat)
 
                         if cc==0:
@@ -1202,7 +1471,8 @@ class CSAMatrixHolder(MatrixHolder):
 
                         aaa=0.0
                         sss=0.0
-
+                        
+                        # OJO ESTA PARTE SOLO FUNCIONA CON num_tokens_cat en los virtuales
                         diccionarioClase = space.virtual_classes_holder_train[elemAutor].fd_vocabulary_cat
 
                         if pal not in diccionarioClase:
@@ -1233,7 +1503,7 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
     def __init__(self, space):
         super(CSATrainMatrixHolder, self).__init__(space)
         self._matrix_concepts_terms = None
-        self.build_matrix()
+        #self.build_matrix()
 
     def build_matrix_concepts_terms(self, space):
         '''
@@ -1273,7 +1543,7 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
                 #print arch
 
                 tokens = space.virtual_classes_holder_train[author].dic_file_tokens[arch]
-                docActualFd = space.virtual_classes_holder_train[author].dic_file_fd[arch]
+                docActualFd = nltk.FreqDist(tokens) #space.virtual_classes_holder_train[author].dic_file_fd[arch]
                 tamDoc = len(tokens)
                 j = 0
                 for pal in space._vocabulary:
@@ -1336,6 +1606,20 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
     
     def get_instance_namefiles(self):
         return self._instance_namefiles
+    
+    def set_matrix_terms_concepts(self, value):
+        self._matrix_concepts_terms = value
+    
+    def set_matrix(self, value):
+        # See how we have transpose this matrix, since get method assumes it is
+        # not transposed.
+        self._matrix = value.transpose()
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
 
 
 class CSATestMatrixHolder(CSAMatrixHolder):
@@ -1362,6 +1646,17 @@ class CSATestMatrixHolder(CSAMatrixHolder):
     
     def get_instance_namefiles(self):
         return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        # See how we have transpose this matrix, since get method assumes it is
+        # not transposed.
+        self._matrix = value.transpose()
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
 
 
 class BOWMatrixHolder(MatrixHolder):
@@ -1378,40 +1673,65 @@ class BOWMatrixHolder(MatrixHolder):
 
         t1 = time.time()
         print "Starting BOW representation..."
+        
+        len_vocab = len(space._vocabulary)
 
-        matrix_docs_terms = numpy.zeros((len(corpus_file_list), len(space._vocabulary)),
+        matrix_docs_terms = numpy.zeros((len(corpus_file_list), len_vocab),
                                         dtype=numpy.float64)
         instance_categories = []
         instance_namefiles = []
         
+        ################################################################
+        # SUPER SPEED 
+        unorder_dict_index = {}
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+        ###############################################################    
+        
+            
         i = 0      
-
         for autor in space.categories:
             archivos = virtual_classes_holder[autor].cat_file_list
             for arch in archivos:
                 tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
-                docActualFd = virtual_classes_holder[autor].dic_file_fd[arch]
+                docActualFd = nltk.FreqDist(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
                 tamDoc = len(tokens)
-
-                j = 0
-                for pal in space._vocabulary:
-                        
-                    if (pal in docActualFd) and tamDoc > 0:
-                        #print str(freq) + " antes"
-                        freq = docActualFd[pal] / float(tamDoc) #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
-#                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
-#                        freq = math.log((1 + docActual.diccionario[pal] / (float(docActual.tamDoc))), 2)
-                        #print str(freq) + " despues"
-                        # uncomment the following line if you want a boolean weigh :)
-                        # freq=1.0
-                        #if pal == "xico":
-                        #    print pal +"where found in: "  +arch
+                
+                ################################################################
+                # SUPER SPEED 
+                for pal in docActualFd:
+                    
+                    if (pal in unorder_dict_index) and tamDoc > 0:
+                        freq = docActualFd[pal] / float(tamDoc)
                     else:
-                        freq = 0
-#                    terminos[j] += freq
-                    matrix_docs_terms[i,j] = freq
+                        freq = 0.0
+                        
+                    matrix_docs_terms[i, unorder_dict_index[pal]] = freq
+                    
+                ################################################################
 
-                    j += 1
+                ################################################################
+                # VERY SLOW
+#                j = 0
+#                for pal in space._vocabulary:
+#                        
+#                    if (pal in docActualFd) and tamDoc > 0:
+#                        #print str(freq) + " antes"
+#                        freq = docActualFd[pal] / float(tamDoc) #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
+##                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
+##                        freq = math.log((1 + docActual.diccionario[pal] / (float(docActual.tamDoc))), 2)
+#                        #print str(freq) + " despues"
+#                        # uncomment the following line if you want a boolean weigh :)
+#                        # freq=1.0
+#                        #if pal == "xico":
+#                        #    print pal +"where found in: "  +arch
+#                    else:
+#                        freq = 0
+##                    terminos[j] += freq
+#                    matrix_docs_terms[i,j] = freq
+#
+#                    j += 1
+                    ############################################################
 
                 i+=1
                 
@@ -1448,6 +1768,15 @@ class BOWTrainMatrixHolder(BOWMatrixHolder):
     
     def get_instance_namefiles(self):
         return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
 
 
 class BOWTestMatrixHolder(BOWMatrixHolder):
@@ -1471,6 +1800,15 @@ class BOWTestMatrixHolder(BOWMatrixHolder):
     
     def get_instance_namefiles(self):
         return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
 
 
 class LSIMatrixHolder(MatrixHolder):
@@ -1496,7 +1834,7 @@ class LSIMatrixHolder(MatrixHolder):
             archivos = virtual_classes_holder[autor].cat_file_list
             for arch in archivos:
                 tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
-                docActualFd = virtual_classes_holder[autor].dic_file_fd[arch]
+                docActualFd = nltk.FreqDist(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
                 tamDoc = len(tokens)
 
                 j = 0
@@ -1572,6 +1910,15 @@ class LSITrainMatrixHolder(LSIMatrixHolder):
     
     def get_instance_namefiles(self):
         return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
 
 
 class LSITestMatrixHolder(BOWMatrixHolder):
@@ -1604,6 +1951,15 @@ class LSITestMatrixHolder(BOWMatrixHolder):
     
     def get_instance_namefiles(self):
         return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
 
 
 class Report(object):
@@ -1788,18 +2144,20 @@ class Report(object):
         for key in virtual_categories.keys():
             virtual_category = virtual_categories[key]
             f_details.write("Author: %s\n" % virtual_category.author)
-            f_details.write("Number of tokens: %s\n" % virtual_category.num_tokens_cat)
-            f_details.write("Author Vocabulary: \n%s\n" % Util.build_fancy_list_string(Util.get_tuples_from_fdist(virtual_category.fd_vocabulary_cat)))
+            # OJO SOLO FUNCIONA CON LOS VIRTUALES FULL
+            # f_details.write("Number of tokens: %s\n" % virtual_category.num_tokens_cat)
+            # f_details.write("Author Vocabulary: \n%s\n" % Util.build_fancy_list_string(Util.get_tuples_from_fdist(virtual_category.fd_vocabulary_cat)))
             f_details.write("File's list:\n%s\n" % Util.build_fancy_list_string(virtual_category.cat_file_list))
 
+            # THE NEXT LINES ONLY WORKS USING FULL VIRTUALS
             #===================================================================
             # Build the vocabulary tuples for each file
             #===================================================================
-            vocabulary_file_tuples = Util.get_tuples_from_fdist(virtual_category.dic_file_fd)
+            # vocabulary_file_tuples = Util.get_tuples_from_fdist(virtual_category.dic_file_fd)
 
-            str_vocabulary_file = Util.build_fancy_list_string(vocabulary_file_tuples)
+            # str_vocabulary_file = Util.build_fancy_list_string(vocabulary_file_tuples)
 
-            f_details.write("Vocabulary per file:\n" + str_vocabulary_file + "\n")
+            # f_details.write("Vocabulary per file:\n" + str_vocabulary_file + "\n")
             #===================================================================
 
         f_details.close()
@@ -1832,6 +2190,205 @@ class Report(object):
 #                        sub_space.get_categories(),
 #                        sub_space.get_matrix_test(),
 #                        sub_space.get_test_files())
+
+class ReportPart(object):
+    
+    def generate_report_part(self,
+                        root,
+                        experiment_name,
+                        experiment_base_path,
+                        global_kwargs_list,
+                        part_train=True):
+
+        self.experiment_name = experiment_name
+        self.experiment_base_path = experiment_base_path
+        self.global_kwargs_list = global_kwargs_list
+        self.root = root
+        self.part_train = part_train
+
+        Util.create_a_dir(self.experiment_base_path)
+
+        iterator = root.create_iterator()
+
+        self.fancy_print_space_part(root, is_root=True)
+
+        self.f_config_java_classifier = \
+        open("%s/%s_config_java_classifier_%s.txt" % (root.space_path, str(("Test", "Train")[self.part_train]), self.experiment_name), 'w')
+        self.f_config_java_classifier.write("spaces:\n")
+        self.a = 1
+        self.b = 0
+
+        for space in iterator:
+            self.fancy_print_space_part(space)
+
+        self.f_config_java_classifier.write("class_index: " + str(self.b))
+        self.f_config_java_classifier.close()
+        
+    def fancy_print_space_part(self, space, is_root=False):
+        self.general_report_part(space)
+        
+        if is_root:
+            self.create_arrfs_part(space)
+            self.create_bin_matrices_part(space)
+            
+        self.create_properties_files_part(space)
+
+        if space.is_leaf():
+            self.create_details_files_part(space)
+
+
+    def general_report_part(self, space):
+        Util.create_a_dir(space.space_path)
+
+        f_config = open("%s/%s_config_%s.txt" % (space.space_path, str(("Test", "Train")[self.part_train]), self.experiment_name),
+                        'w')
+
+        # FIXME: Is this really necessary?, or Can you just to print the string config.?
+        f_config.write("Experiment_name: %s\n" % self.experiment_name)
+        f_config.write("Base_path: %s\n" % self.experiment_base_path)
+        f_config.write("Space_path: %s\n" % space.space_path)
+        f_config.write("Categories: %s\n" % str(space.categories))
+        
+        if self.part_train:
+            f_config.write("Train_corpus_config: %s\n" % str(space.train_corpus))
+            f_config.write("corpus_file_list_train: \n%s\n\n" % Util.build_fancy_list_string(space.get_train_files()))
+        else:
+            f_config.write("Test_corpus_config: %s\n" % str(space.test_corpus))
+            f_config.write("corpus_file_list_test: \n%s\n\n" % Util.build_fancy_list_string(space.get_test_files()))
+
+        f_config.close()
+
+    def create_arrfs_part(self, space):
+        
+        if self.part_train:            
+            train_arrf_path = "%s/train_subspace%s_%s.arff" % (space.space_path, space.id_space, self.experiment_name)
+            Util.write_arrf(train_arrf_path,
+                            space.get_attributes(),
+                            space.get_categories(),
+                            space.get_matrix_train(),
+                            space.get_train_files())
+        else:
+            test_arrf_path = "%s/test_subspace%s_%s.arff" % (space.space_path, space.id_space, self.experiment_name)
+            Util.write_arrf(test_arrf_path,
+                            space.get_attributes(),
+                            space.get_categories(),
+                            space.get_matrix_test(),
+                            space.get_test_files())
+        
+    def create_bin_matrices_part(self, space):
+        
+        if self.part_train:
+             
+            train_bin_path = "%s/train_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
+            Util.write_bin_matrix(train_bin_path,
+                            space.get_attributes(),
+                            space.get_categories(),
+                            space.get_matrix_train(),
+                            space.get_train_files())
+            
+            train_bin_path_extra = "%s/train_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
+            numpy.save(train_bin_path_extra + "_instance_categories.npy", numpy.array(space.get_train_instance_categories()))
+            numpy.save(train_bin_path_extra + "_instance_namefiles.npy", numpy.array(space.get_train_files()))
+        else:
+            
+            test_bin_path = "%s/test_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
+            Util.write_bin_matrix(test_bin_path,
+                            space.get_attributes(),
+                            space.get_categories(),
+                            space.get_matrix_test(),
+                            space.get_test_files())
+            
+            test_bin_path_extra = "%s/test_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
+            numpy.save(test_bin_path_extra + "_instance_categories.npy", numpy.array(space.get_test_instance_categories()))
+            numpy.save(test_bin_path_extra + "_instance_namefiles.npy", numpy.array(space.get_test_files()))
+
+    def create_properties_files_part(self, space):
+        
+        f_vocabulary_1 = open("%s/%s_vocabulary_subspace%s_%s.txt" % (space.space_path, str(("Test", "Train")[self.part_train]), space.id_space, self.experiment_name), 'w')
+
+        vocabulary_tuples_1 = Util.get_tuples_from_fdist(space.get_fdist())            
+
+        str_vocabulary_1 = Util.build_fancy_list_string(vocabulary_tuples_1)
+        #print type(str_vocabulary)
+        #str_vocabulary = u'' + str_vocabulary
+        #print type(str_vocabulary)
+        f_vocabulary_1.write(str_vocabulary_1)
+        f_vocabulary_1.close()
+        
+        
+        f_vocabulary = open("%s/%s_vocabulary_subspace_Simple%s_%s.txt" % (space.space_path, str(("Test", "Train")[self.part_train]), space.id_space, self.experiment_name), 'w')
+
+        vocabulary_tuples_temp = Util.get_tuples_from_fdist(space.get_fdist())        
+        
+        vocabulary_tuples = []
+        for v_tuple in vocabulary_tuples_temp:
+            element = v_tuple[0]
+            number = v_tuple[1]
+            print element.encode('utf-8')
+            print type(element)
+            vocabulary_tuples +=[(element.encode('utf-8'), number)]
+            
+
+        str_vocabulary = Util.build_fancy_vocabulary(vocabulary_tuples)
+        #print type(str_vocabulary)
+        #str_vocabulary = u'' + str_vocabulary
+        #print type(str_vocabulary)
+        f_vocabulary.write(str_vocabulary)
+        f_vocabulary.close()
+
+    def create_details_files_part(self, space):
+        
+        if self.part_train: 
+                
+            self.create_details_part(space.space_path,
+                                space.id_space,
+                                self.experiment_name,
+                                space.get_virtual_classes_holder_train(),
+                                "train")
+            
+        else:
+
+            self.create_details_part(space.space_path,
+                                space.id_space,
+                                self.experiment_name,
+                                space.get_virtual_classes_holder_test(),
+                                "test")
+
+
+        self.b += len(space.get_attributes())
+
+        self.f_config_java_classifier.write("- {a: " + str(self.a) + ", " + "b: " + str(self.b) + "}\n")
+        #self.f_config_java_classifier.write()
+
+        self.a += len(space.get_attributes())
+
+
+    def create_details_part(self, space_path, id_space, experiment_name, virtual_classes_holder, which_dataset):
+        f_details = open("%s/%s_details_subspace%s_%s_%s.txt" % (space_path, str(("Test", "Train")[self.part_train]), id_space, experiment_name, which_dataset), 'w')
+
+        virtual_categories = virtual_classes_holder
+
+        for key in virtual_categories.keys():
+            virtual_category = virtual_categories[key]
+            f_details.write("Author: %s\n" % virtual_category.author)
+            # OJO SOLO FUNCIONA CON LOS VIRTUALES FULL
+            # f_details.write("Number of tokens: %s\n" % virtual_category.num_tokens_cat)
+            # f_details.write("Author Vocabulary: \n%s\n" % Util.build_fancy_list_string(Util.get_tuples_from_fdist(virtual_category.fd_vocabulary_cat)))
+            f_details.write("File's list:\n%s\n" % Util.build_fancy_list_string(virtual_category.cat_file_list))
+
+            # THE NEXT LINES ONLY WORKS USING FULL VIRTUALS
+            #===================================================================
+            # Build the vocabulary tuples for each file
+            #===================================================================
+            # vocabulary_file_tuples = Util.get_tuples_from_fdist(virtual_category.dic_file_fd)
+
+            # str_vocabulary_file = Util.build_fancy_list_string(vocabulary_file_tuples)
+
+            # f_details.write("Vocabulary per file:\n" + str_vocabulary_file + "\n")
+            #===================================================================
+
+        f_details.close()
+        
 
 class Corpora(object):
     '''
@@ -1968,6 +2525,44 @@ class SpaceComponent(object):
 
     def get_virtual_classes_holder_test(self):
         return self.virtual_classes_holder_test
+    
+    def create_space_properties_and_save(self):
+        
+        self.create_space_properties()
+        
+        Util.create_a_dir(self.space_path)
+        
+        cache_file = "%s/%s_properties.dat" % (self.space_path, self.id_space)
+        shelf = shelve.open(cache_file, protocol=1)
+        
+        shelf[cache_file + "_vocabulary"] = self._vocabulary
+        shelf[cache_file + "_fdist"] = self._fdist
+        
+        temp_corpuses = []
+        for kwargs_space_term in self.kwargs_space['terms']:
+            temp_corpuses += [kwargs_space_term['corpus']]
+            kwargs_space_term['corpus'] = "NOSERIALIZED"    
+            
+        yaml.dump(self.kwargs_space, open(cache_file + "_kwargs_space.yaml", 'w'))
+        
+        for (kwargs_space_term, temp_corpus) in zip(self.kwargs_space['terms'], temp_corpuses):
+            kwargs_space_term['corpus'] = temp_corpus                    
+        
+        shelf.close()
+        
+    def load_space_properties_(self):
+        
+        cache_file = "%s/%s_properties.dat" % (self.space_path, self.id_space)
+        
+        shelf = shelve.open(cache_file, protocol=1)
+        
+        self._vocabulary = shelf[cache_file + "_vocabulary"] 
+        self._fdist = shelf[cache_file + "_fdist"]
+            
+        self.kwargs_space = yaml.load(open(cache_file + "_kwargs_space.yaml", 'r'))    
+        
+        shelf.close()
+        
 
     def create_space_properties(self):
         
@@ -1987,10 +2582,14 @@ class SpaceComponent(object):
             # If this is the root, build the virtual_elements and apply the
             # global filters to get the tokens.
             # ==================================================================
+            print "STEP: 1 ..."
             virtual_processor = \
             self.factory_processing.\
             build_virtual_processor(self.kwargs_space['terms'])
+            
             self.set_virtual_elements(virtual_processor.virtual_elements)
+            
+            print "STEP: 2 ..."
 
             virtual_global_processor = \
             self.factory_processing.\
@@ -1998,6 +2597,8 @@ class SpaceComponent(object):
                                            self.kwargs_space['filters_terms'])
 
             self._fdist = virtual_global_processor.fdist
+            
+            print "END OF STEPS 1 AND 2..."
 #
 #            FilterTermsVirtualGlobalProcessor(self.virtual_elements,
 #                                              self.kwargs_space['filters_terms'])
@@ -2051,11 +2652,19 @@ class SpaceComponent(object):
                     # true that we want terms in the parent node, BUT we don't want
                     # the same way to filter !!!!
                     # ----------------------------------------------------------
+                    
+                    # 1.- (ALT_EXPLANATION) : ARGS LEVEL ...  Get(Save) the filters of this space
                     if 'filters_terms' in kwargs_term:
                         filters_terms = kwargs_term['filters_terms']
-
+                        
+                        
+                    # 2.- (ALT_EXPLANATION) : OBJECT VIRTUAL LEVEL: Check all virtuals of the parent 
+                    # and reatin those with the same id in this space (1***).
+                    
                     for virtual_element in self.get_virtual_elements_root():
                         #match = re.match('.+/([0-9]+)', virtual_element.id_term)
+                        
+                        # 3.- (ALT_EXPLANATION) : (1***) OBJECT VIRTUAL LEVEL
                         if (virtual_element.id_term == kwargs_term['id_term']):
                             self.kwargs_space['terms'][i] = virtual_element.kwargs_term
 
@@ -2068,13 +2677,19 @@ class SpaceComponent(object):
                             # However we don't want to filter vocabulary in the same way as
                             # the parent did. So, we override the value loaded in the
                             # POINT_1.
+                            
+                            # 4.- (ALT_EXPLANATION) : ARGS LEVEL.... put the child filters to the parent node :)
+                            # to the arguments.
                             if 'filters_terms' in kwargs_term:
                                 self.kwargs_space['terms'][i]['filters_terms'] = filters_terms
-
+                                
+                                
+                            # 5.- (ALT_EXPLANATION) : OBJECT VIRTUAL LEVEL Here we retain the identical virtuals of the parent
                             self.virtual_elements += [virtual_element]
 
                     i += 1
 
+                # 6.- (ALT_EXPLANATION): REFILTER THE VIRTUAL OBJECT USING ARGS LEVEL :) (IN PAIRS)
                 virtual_re_processor = \
                 self.factory_processing.\
                 build_virtual_re_processor(self.virtual_elements,
@@ -2086,6 +2701,7 @@ class SpaceComponent(object):
                 self.virtual_elements = \
                 virtual_re_processor.new_virtual_elements
 
+                # APPLY THE GLOBAL FILTERS
                 virtual_global_processor = \
                 self.factory_processing.\
                 build_virtual_global_processor(self.virtual_elements,
@@ -2118,6 +2734,14 @@ class SpaceComponent(object):
     @abstractmethod
     def create_representation(self):
         pass
+    
+    @abstractmethod
+    def create_train_representation_and_save(self):
+        pass
+    
+    @abstractmethod
+    def load_train_and_create_test_representation(self):
+        pass
 
     @abstractmethod
     def get_attributes(self):
@@ -2141,6 +2765,14 @@ class SpaceComponent(object):
 
     @abstractmethod
     def get_test_files(self):
+        pass
+    
+    @abstractmethod
+    def get_train_instance_categories(self):
+        pass
+
+    @abstractmethod
+    def get_test_instance_categories(self):
         pass
 
     def get_vocabulary(self):
@@ -2213,6 +2845,12 @@ class SpaceComposite(SpaceComponent):
         raise UnsupportedOperationError("Unsupported operation")
 
     def create_representation(self):
+        raise UnsupportedOperationError("Unsupported operation")
+    
+    def create_train_representation_and_save(self):
+        raise UnsupportedOperationError("Unsupported operation")
+    
+    def load_train_and_create_test_representation(self):
         raise UnsupportedOperationError("Unsupported operation")
 
     def get_attributes(self):
@@ -2311,6 +2949,68 @@ class SpaceComposite(SpaceComponent):
         return test_instance_namefiles
         
         #return self.corpus_file_list_test
+        
+    def get_train_instance_categories(self):
+        train_instance_categories = None
+
+        for space_component in self.space_components:
+            if (train_instance_categories == None):
+                train_instance_categories = space_component.get_train_instance_categories()
+            else:
+                
+                flag_identical = True
+                
+                if len(train_instance_categories) != len(space_component.get_train_instance_categories()):
+                    flag_identical = False
+                    print "The Size is different (INSTANCE_CAT)!!!: ", len(train_instance_categories), " VS ", len(space_component.get_train_instance_categories())  
+                    
+                for a, b in zip (train_instance_categories, space_component.get_train_instance_categories()):
+                    if a != b:
+                        flag_identical = False
+                        print "Elements are not the same (INSTANCE_CAT)!!!: ", a, " VS ", b
+                        break
+                    
+                if flag_identical:
+                    train_instance_categories = space_component.get_train_instance_categories()
+                else:
+                    raise NonIdenticalInstancesOfSubspacesError\
+                        ("The subspaces file lists are non identical (INSTANCE_CAT)!!!:" +
+                         " please check the length or elements.")
+
+        return train_instance_categories
+        
+        #return self.corpus_file_list_train
+
+    def get_test_instance_categories(self):
+        test_instance_categories = None
+
+        for space_component in self.space_components:
+            if (test_instance_categories == None):
+                test_instance_categories = space_component.get_test_instance_categories()
+            else:
+                
+                flag_identical = True
+                
+                if len(test_instance_categories) != len(space_component.get_test_instance_categories()):
+                    flag_identical = False
+                    print "The Size is different (INSTANCE_CAT)!!!: ", len(test_instance_categories), " VS ", len(space_component.get_test_instance_categories())
+                    
+                for a, b in zip (test_instance_categories, space_component.get_test_instance_categories()):
+                    if a != b:
+                        flag_identical = False
+                        print "Elements are not the same (INSTANCE_CAT)!!!: ", a, " VS ", b
+                        break
+                    
+                if flag_identical:
+                    test_instance_categories = space_component.get_test_instance_categories()
+                else:
+                    raise NonIdenticalInstancesOfSubspacesError\
+                        ("The subspaces file lists are non identical (INSTANCE_CAT)!!!:" +
+                         " please check the length or elements.")
+
+        return test_instance_categories
+        
+        #return self.corpus_file_list_test
 
     def get_tokens(self):
         pass
@@ -2358,18 +3058,74 @@ class SpaceItem(SpaceComponent):
         VirtualCategoriesHolder(self.categories,
                                 self.train_corpus,
                                 self.kwargs_space['terms'],
-                                self._vocabulary,
+                                self._fdist,
                                 self.corpus_file_list_train).virtual_categories
 
         self.virtual_classes_holder_test = \
         VirtualCategoriesHolder(self.categories,
                                 self.test_corpus,
                                 self.kwargs_space['terms'],
-                                self._vocabulary,
+                                self._fdist,
                                 self.corpus_file_list_test).virtual_categories
 
         print "Virtuals has been built"
 
+
+    def create_train_representation_and_save(self):
+        self.factory_representation = FactorySimpleRepresentation()
+
+        self.representation = \
+        self.factory_representation.build(self.kwargs_space['representation'])
+
+        self.attribute_header = \
+        self.representation.build_attribute_header(self._fdist,
+                                                   self._vocabulary,
+                                                   self.categories)
+
+####        print "DATA ######"
+        print self.kwargs_space['representation']
+####        print self.attribute_header
+####        print self.attribute_header.get_attributes()
+####        print self.attribute_header._fdist
+####        print self.attribute_header._vocabulary
+####        print self.attribute_header._categories
+####        print "DATA ######"
+
+        self.matrix_train_holder = \
+        self.representation.build_matrix_train_holder(self)
+        
+        self.representation.save_train_data(self)
+
+        # self.matrix_test_holder = \
+        # self.representation.build_matrix_test_holder(self)                
+        
+    def load_train_and_create_test_representation(self):
+        self.factory_representation = FactorySimpleRepresentation()
+
+        self.representation = \
+        self.factory_representation.build(self.kwargs_space['representation'])
+
+        self.attribute_header = \
+        self.representation.build_attribute_header(self._fdist,
+                                                   self._vocabulary,
+                                                   self.categories)
+
+####        print "DATA ######"
+        print self.kwargs_space['representation']
+####        print self.attribute_header
+####        print self.attribute_header.get_attributes()
+####        print self.attribute_header._fdist
+####        print self.attribute_header._vocabulary
+####        print self.attribute_header._categories
+####        print "DATA ######"
+
+        self.matrix_train_holder = \
+        self.representation.load_train_data(self)
+
+        self.matrix_test_holder = \
+        self.representation.build_matrix_test_holder(self)
+        
+        
     def create_representation(self):
         self.factory_representation = FactorySimpleRepresentation()
 
@@ -2394,7 +3150,7 @@ class SpaceItem(SpaceComponent):
         self.representation.build_matrix_train_holder(self)
 
         self.matrix_test_holder = \
-        self.representation.build_matrix_test_holder(self)
+        self.representation.build_matrix_test_holder(self)   
 
     def is_leaf(self):
         return True
@@ -2417,6 +3173,14 @@ class SpaceItem(SpaceComponent):
 
     def get_test_files(self):
         return self.matrix_test_holder.get_instance_namefiles()
+        #return self.corpus_file_list_test
+        
+    def get_train_instance_categories(self):
+        return self.matrix_train_holder.get_instance_categories()
+        #return self.corpus_file_list_train
+
+    def get_test_instance_categories(self):
+        return self.matrix_test_holder.get_instance_categories()
         #return self.corpus_file_list_test
 
     def get_tokens(self):
