@@ -441,9 +441,21 @@ class Util(object):
 
         return list_of_files
     
+    @staticmethod
+    def getValidTokens(kwargs_term, set_vocabulary):
+        factory_term_lex = FactoryTermLex()
+        valid_tokens = []
+
+        term = factory_term_lex.build_tokens(kwargs_term['type_term'], kwargs_term)
+        valid_tokens += term.tokens
+        #print "vocabulary: " + str(len(vocabulary))
+        local_vocabulary = set_vocabulary & set(valid_tokens)
+        #print "local vocabulary: " + str(len(local_vocabulary))
+        valid_tokens = [token for token in valid_tokens if token in local_vocabulary]
+        return valid_tokens
     
     @staticmethod
-    def getValidTokens(kwargs_term, fdist):
+    def getValidTokens_bak2(kwargs_term, fdist):
         factory_term_lex = FactoryTermLex()
         valid_tokens = []
 
@@ -650,11 +662,11 @@ class FullFilesCorpus(FilterCorpus):
 class FactoryInfoClasses(object):
 
     @staticmethod
-    def crear(authors, corpus, token_type, kwargs, fdist,
+    def crear(authors, corpus, token_type, kwargs, vocabulary,
               corpus_file_list, tokens_path, style="NORMAL"):
 
         if style == "NORMAL":
-            return VirtualCategoriesHolder(authors, corpus, token_type, kwargs, fdist,
+            return VirtualCategoriesHolder(authors, corpus, token_type, kwargs, vocabulary,
                                corpus_file_list, tokens_path)
 
             
@@ -671,8 +683,8 @@ class TransformedDict(collections.MutableMapping):
     def set_corpus(self, corpus):
         self._corpus = corpus
     
-    def set_fdist(self, fdist):
-        self._fdist = fdist
+    def set_set_vocabulary(self, set_vocabulary):
+        self._set_vocabulary = set_vocabulary
 
     def __getitem__(self, key):            
         #return self.store[self.__keytransform__(key)]
@@ -684,7 +696,7 @@ class TransformedDict(collections.MutableMapping):
             kwargs_term['corpus'] = self._corpus
 
             list_file_tokens_combined += \
-            Util.getValidTokens(kwargs_term, self._fdist)
+            Util.getValidTokens(kwargs_term, self._set_vocabulary)
             
         print file_path,": ",list_file_tokens_combined
             
@@ -753,7 +765,7 @@ class VirtualCategoriesHolder(object):
     or in the test corpus. This can give clues about why or why not things work.
     '''
 
-    def __init__(self, categories, corpus, kwargs_terms, fdist,
+    def __init__(self, categories, corpus, kwargs_terms, vocabulary,
                  corpus_file_list):
 
         # DEBUG: print "BUILDING VIRTUALS..."
@@ -794,7 +806,7 @@ class VirtualCategoriesHolder(object):
             dic_file_tokens = TransformedDict()
             dic_file_tokens.set_kwargs_terms(kwargs_terms)
             dic_file_tokens.set_corpus(corpus)
-            dic_file_tokens.set_fdist(fdist)
+            dic_file_tokens.set_set_vocabulary(set(vocabulary))
             # ------------------------------------------------------------------
             
             for author_file in cat_file_list:
@@ -1371,6 +1383,8 @@ class CSAMatrixHolder(MatrixHolder):
         unorder_dict_index = {}
         for (term, u) in zip(space._vocabulary, range(len_vocab)):
             unorder_dict_index[term] = u
+            
+        set_vocabulary = set(space._vocabulary)
         ############################################################### 
 
         k=0
@@ -1395,7 +1409,7 @@ class CSAMatrixHolder(MatrixHolder):
                 # SUPER SPEED 
                 for pal in docActualFd:
                     
-                    if (pal in unorder_dict_index):
+                    if (pal in set_vocabulary):
                         weigh = docActualFd[pal] / float(tam_doc)
                     else:
                         weigh = 0.0
@@ -3058,14 +3072,14 @@ class SpaceItem(SpaceComponent):
         VirtualCategoriesHolder(self.categories,
                                 self.train_corpus,
                                 self.kwargs_space['terms'],
-                                self._fdist,
+                                self._vocabulary,
                                 self.corpus_file_list_train).virtual_categories
 
         self.virtual_classes_holder_test = \
         VirtualCategoriesHolder(self.categories,
                                 self.test_corpus,
                                 self.kwargs_space['terms'],
-                                self._fdist,
+                                self._vocabulary,
                                 self.corpus_file_list_test).virtual_categories
 
         print "Virtuals has been built"
