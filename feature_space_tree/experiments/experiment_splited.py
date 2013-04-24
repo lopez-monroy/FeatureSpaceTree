@@ -49,6 +49,8 @@ import sys
 import shutil
 import re
 import argparse
+import nltk
+import os
 #print sys.path
 
 from ..representations import representations
@@ -118,6 +120,8 @@ def recursive_build(id_space,
 def main_function():
 
     # FIXME: Here we are missing a validation for the arguments ...
+    
+    nltk.data.path.append(os.getcwd() + "/nltk_data")
     
     parser = \
     argparse.ArgumentParser(description='Perform representation of train and test data in a separated way ',
