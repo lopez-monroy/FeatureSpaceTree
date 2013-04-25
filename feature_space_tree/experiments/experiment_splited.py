@@ -145,6 +145,7 @@ def main_function():
     
     args = parser.parse_args()
     
+    print "********************************************************************"
     print args
     
     if args.train == args.test:
@@ -270,7 +271,8 @@ def main_function():
         except representations.UnsupportedOperationError as error:
             print (error)
         else:
-            print "attributes: " + str(e.get_attributes())
+            pass
+            # PAN13: print "attributes: " + str(e.get_attributes())
             #print "matrix_train: " + str(e.get_matrix_train())
             #print "matrix_test: " + str(e.get_matrix_test())
         print "================================================\n\n"
@@ -305,6 +307,8 @@ def main_function():
     t2 = time.time()
     print representations.Util.get_string_fancy_time(t2 - t1,
                                                      'End of the principal script')
+    
+    print "********************************************************************"
 
 #if __name__ == '__main__':
 

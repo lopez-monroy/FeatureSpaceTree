@@ -226,7 +226,7 @@ class Util(object):
         '''
         string_arff = ''
         string_arff += ("@relation %s\n" % relation_name)
-        print str(categories)
+        # PAN13: print "Categories for the arff: ", str(categories)
         str_categories=", ".join(categories[:-1]) + ", " + categories[-1]
 
         i = 1
@@ -655,7 +655,7 @@ class FullFilesCorpus(FilterCorpus):
             docs += author_file_list
 
         docs.sort()
-        print docs
+        # PAN13: print docs
         return docs
 
 
@@ -698,7 +698,7 @@ class TransformedDict(collections.MutableMapping):
             list_file_tokens_combined += \
             Util.getValidTokens(kwargs_term, self._fdist)
             
-        print file_path,": ",list_file_tokens_combined
+        # PAN13: print file_path,": ",list_file_tokens_combined
             
         return list_file_tokens_combined     
 
@@ -969,7 +969,7 @@ class CorpusObject(object):
 
         self.template_constructor = FactoryCommonCorpusTemplate().build_corpus(template_option)
 
-        print self.template_constructor
+        # PAN13: print self.template_constructor
 
         self.filtered_train_corpus = None
         self.filtered_test_corpus = None
@@ -1369,7 +1369,7 @@ class CSAMatrixHolder(MatrixHolder):
 
         '''
         t1 = time.time()
-        print "inicio CSA..."
+        print "Starting CSA matrix documents-concepts"
 
         matrix_concepts_docs = numpy.zeros((len(space.categories), len(corpus_file_list)),
                                            dtype=numpy.float64)
@@ -1440,8 +1440,7 @@ class CSAMatrixHolder(MatrixHolder):
         self._instance_namefiles = instance_namefiles
 
         t2 = time.time()
-        print str(t2-t1) + " CSA segunda parte"
-        print "fin ..."
+        print "End CSA matrix documents-concepts. Time: ", str(t2-t1)
 
     def weight_matrix(self, space, elemAutor, tokens, docActualFd, matrix_concepts_docs, numAut, k, mat_concepts_term):
         """
@@ -1533,7 +1532,8 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         '''
 
         t1 = time.time()
-        print "inicio CSA..."
+        
+        print "Starting CSA matrix concepts-terms..."
 
         matrix_concepts_terms = numpy.zeros((len(space.categories), len(space._vocabulary)),
                                             dtype=numpy.float64)
@@ -1586,7 +1586,7 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         self._matrix_concepts_terms = matrix_concepts_terms
 
         t2 = time.time()
-        print str(t2 - t1) + " CSA primera parte"
+        print "End CSA matrix concepts-terms. Time: ", str(t2 - t1)
 
 
     def normalize_matrix(self, normalizer, matrix):
@@ -1757,7 +1757,7 @@ class BOWMatrixHolder(MatrixHolder):
         #print matConceptosTerm
 
         t2 = time.time()
-        print Util.get_string_fancy_time(t2 - t1, "End if BOW representation.")
+        print "End of BOW representation. Time: ", str(t2-t1)
 
 class BOWTrainMatrixHolder(BOWMatrixHolder):
 
@@ -2114,8 +2114,9 @@ class Report(object):
         for v_tuple in vocabulary_tuples_temp:
             element = v_tuple[0]
             number = v_tuple[1]
-            print element.encode('utf-8')
-            print type(element)
+            # PAN13: print "VOCABULARY ELEMENTS: "
+            # PAN13: print element.encode('utf-8')
+            # PAN13: print type(element)
             vocabulary_tuples +=[(element.encode('utf-8'), number)]
             
 
@@ -2336,8 +2337,9 @@ class ReportPart(object):
         for v_tuple in vocabulary_tuples_temp:
             element = v_tuple[0]
             number = v_tuple[1]
-            print element.encode('utf-8')
-            print type(element)
+            # PAN13: print "VOCABULARY ELEMENTS: "
+            # PAN13: print element.encode('utf-8')
+            # PAN13: print type(element)
             vocabulary_tuples +=[(element.encode('utf-8'), number)]
             
 
