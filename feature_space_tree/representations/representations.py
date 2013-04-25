@@ -1251,12 +1251,30 @@ class FactoryBOWRepresentation(AbstractFactoryRepresentation):
         return self.__bow_test_matrix_holder
     
     def save_train_data(self, space):
-        print "ERROR: SERIALIZATION NOT IMPLEMENTED "
-        pass
+        
+        if self.__bow_train_matrix_holder is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            numpy.save(cache_file + "_mat_docs_terms.npy", 
+                       self.__bow_train_matrix_holder.get_matrix())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.__bow_train_matrix_holder.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.__bow_train_matrix_holder.get_instance_categories())
+        else:
+            print "ERROR: There is not a train matrix terms concepts built"
 
     def load_train_data(self, space):
-        print "ERROR: SERIALIZATION NOT IMPLEMENTED "
-        pass
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        self.__bow_train_matrix_holder = BOWTrainMatrixHolder(space)        
+        self.__bow_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_terms.npy"))
+        self.__bow_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        self.__bow_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+        
+        return self.__bow_train_matrix_holder     
 
 
 class FactoryCSARepresentation(AbstractFactoryRepresentation):
