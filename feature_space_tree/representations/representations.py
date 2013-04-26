@@ -1569,12 +1569,15 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         for author in space.categories:
             archivos = space.virtual_classes_holder_train[author].cat_file_list
             #print author
+            
+            total_terms_in_class = 0
             for arch in archivos:
                 #print arch
 
                 tokens = space.virtual_classes_holder_train[author].dic_file_tokens[arch]
                 docActualFd = nltk.FreqDist(tokens) #space.virtual_classes_holder_train[author].dic_file_fd[arch]
                 tamDoc = len(tokens)
+                total_terms_in_class += tamDoc
                 j = 0
                 for pal in space._vocabulary:
                     if pal in docActualFd:
@@ -1583,8 +1586,8 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
 #                        freq = math.log((1 + docActualFd[pal] / float(tamDoc)), 10) / math.log(1+float(tamDoc),10) pesado original
         #                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
                         #print pal + " : "+ str(docActualFd[pal]) + " tamDoc:" +  str(float(tamDoc))
-                        freq = math.log((1.0 + docActualFd[pal] / float(1.0 + tamDoc)), 2)
-                        
+                        ##### PAN13: freq = math.log((1.0 + docActualFd[pal] / float(1.0 + tamDoc)), 2)
+                        freq = docActualFd[pal]
                         ##########################################
                         # if freq == 0.0:
                         #     freq=0.00000001
@@ -1597,9 +1600,18 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
                     matrix_concepts_terms[i,j]+=freq
 
                     j += 1
+
+            # matrix_concepts_terms[i] = matrix_concepts_terms[i]/total_terms_in_class     
             #set_printoptions(threshold='nan')
             #print matrix_concepts_terms[i]
             i+=1
+            
+        # PAN13 MODIFICATION -------------------------------------------
+        matrix_concepts_terms = matrix_concepts_terms.transpose()
+        norma=matrix_concepts_terms.sum(axis=0)
+        matrix_concepts_terms=matrix_concepts_terms/norma
+        matrix_concepts_terms = matrix_concepts_terms.transpose()
+        # --------------------------------------------------------------
 
         self._matrix_concepts_terms = matrix_concepts_terms
 
@@ -1616,10 +1628,129 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         matrix=matrix/norma
         return matrix
         #numpy.set_printoptions(threshold='nan')
+        
+        
+    def __calc_entropy(self, row):
+        entropy = 0
+        
+        for e in row:
+            #print row
+            if e > 0:
+                entropy += (-e * math.log(e, 2))
+            
+        return entropy
+        
+    def __filter_mat_by_entropy_and_update_space_properties(self, matrix, space):
+        '''
+        space object is affected (throught an update space method) in this method. Moreover, this method returns
+        a new matrix of terms_concepts (transposed)
+        '''
+        mat = matrix.transpose()
+        
+        debug = False        
+        if debug:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            f_debug = open(cache_file + "_entropy_log.txt", "w")
+        
+        # In this part we perform the by entropy attribute selection -----------
+        entropies_entr_index_row = []
+        index=0
+        for row in mat:
+            the_entropy = self.__calc_entropy(row)
+            entropies_entr_index_row += [(the_entropy, index, row)]
+            if debug:
+                f_debug.write("index: " + str(index) + " term: "+ space._vocabulary[index].encode('utf-8') + " frequency: " + str(space._fdist[space._vocabulary[index]]) + " entropy: " + str(the_entropy) + " row: " + str(row) + "\n")
+            index += 1
+            
+        entropies_entr_index_row.sort()
+        
+        n_selected_terms = space.kwargs_space['select_attributes']['n_selected_terms']
+        class_thresold = space.kwargs_space['select_attributes']['class_thresold']
+        
+        # get the n_selected_terms with low entropy, but at least in thresold classes---
+        
+        selected_attr = []
+        no_selected_attr = []
+        for c_entr, c_index, c_row in entropies_entr_index_row:
+                           
+            total = 0
+            for e in c_row:
+                if e > 0:
+                    total += 1
+                
+            if total >= class_thresold:
+                # print c_index
+                selected_attr += [(c_entr, c_index)]
+            else:
+                no_selected_attr += [(c_entr, c_index)]
+                            
+                            
+        entropies_entr_index = (selected_attr + no_selected_attr)[:n_selected_terms]
+        
+        # ----------------------------------------------------------------------
+        
+        # inver the elements (for easy sort()) :)
+        entropies_index_entr = [ (ind, entr) for entr, ind in entropies_entr_index ]
+        
+        if debug:
+            f_debug.write("selected(entr):" + str(entropies_index_entr) + "\n")
+        
+        entropies_index_entr.sort()
+        
+        if debug:
+            f_debug.write("selected(indexados):" + str(entropies_index_entr) + "\n")
+        
+        new_mat_terms_concepts = numpy.zeros((n_selected_terms, len(space.categories)),
+                                              dtype=numpy.float64)
+        index_i = 0
+        for (ind, entr) in entropies_index_entr:
+            
+            new_mat_terms_concepts[index_i] = mat[ind]
+            
+            if debug:
+                f_debug.write(str(index_i) + " end_index:" + str(ind) + " term: " + space._vocabulary[ind].encode('utf-8')  + " frequency: " + str(space._fdist[space._vocabulary[ind]]) + " row: " + str(new_mat_terms_concepts[index_i]) + "\n")
+            index_i += 1
+        
+        mat=new_mat_terms_concepts.transpose()
+        
+        #-----------------------------------------------------------------------
+        
+        # Now we need to affect the properties of our space---------------------
+        
+        if debug:
+            f_debug.write("before_vocab: " + str(space._vocabulary) + "\n") 
+        new_vocabulary = []
+        for (index, entr) in entropies_index_entr:
+            new_vocabulary += [space._vocabulary[index]]
+        
+        if debug:    
+            f_debug.write("after_vocab: " + str(new_vocabulary) + "\n")                
+            f_debug.write("before_fdist: " + str(space._fdist) + "\n")
+            
+        new_fdist = nltk.FreqDist()
+        for term in new_vocabulary:
+            new_fdist[term] = space._fdist[term]
+        
+        if debug:
+            f_debug.write("after_fdist: " + str(new_fdist) + "\n")
+            f_debug.write("final_vocab: " + str(new_fdist.keys()) + "\n")
+            f_debug.close()
+         
+        # ----------------------------------------------------------------------
+        
+        space.update_and_save_fdist_and_vocabulary(new_fdist)
+        
+        return mat       
 
     def build_matrix(self):
         self.build_matrix_concepts_terms(self.space)
         self._matrix_concepts_terms = self.normalize_matrix_terms_concepts(self._matrix_concepts_terms)
+        
+        if ('select_attributes' in self.space.kwargs_space):            
+            self._matrix_concepts_terms = \
+            self.__filter_mat_by_entropy_and_update_space_properties(self._matrix_concepts_terms, 
+                                                                     self.space)
+                
         self.build_matrix_documents_concepts(self.space,
                                              self.space.virtual_classes_holder_train,
                                              self.space.corpus_file_list_train,
@@ -2558,6 +2689,27 @@ class SpaceComponent(object):
     def get_virtual_classes_holder_test(self):
         return self.virtual_classes_holder_test
     
+    def update_and_save_fdist_and_vocabulary(self, new_fdist):
+        
+        self._fdist = new_fdist
+        self._vocabulary = self._fdist.keys() 
+        
+        Util.create_a_dir(self.space_path)
+        
+        cache_file = "%s/%s_properties.dat" % (self.space_path, self.id_space)
+        shelf = shelve.open(cache_file, protocol=1)
+        
+        shelf[cache_file + "_vocabulary"] = self._vocabulary
+        shelf[cache_file + "_fdist"] = self._fdist
+        shelf.close()
+        
+        for vc_train in self.virtual_classes_holder_train :
+            self.virtual_classes_holder_train[vc_train].dic_file_tokens.set_fdist(self._fdist)
+        
+        for vc_test in self.virtual_classes_holder_test: 
+            self.virtual_classes_holder_test[vc_test].dic_file_tokens.set_fdist(self._fdist)
+        
+    
     def create_space_properties_and_save(self):
         
         self.create_space_properties()
@@ -2569,18 +2721,33 @@ class SpaceComponent(object):
         
         shelf[cache_file + "_vocabulary"] = self._vocabulary
         shelf[cache_file + "_fdist"] = self._fdist
+        shelf.close()
         
+        # save unecesary info for serialization --------------------------------
         temp_corpuses = []
         for kwargs_space_term in self.kwargs_space['terms']:
             temp_corpuses += [kwargs_space_term['corpus']]
-            kwargs_space_term['corpus'] = "NOSERIALIZED"    
+            kwargs_space_term['corpus'] = "NOSERIALIZED"
+            
+        temp_sources = []
+        for kwargs_space_term in self.kwargs_space['terms']:
+            temp_sources += [[kwargs_space_term['source']]]
+            kwargs_space_term['source'] = "NOSERIALIZED" 
+        
+        # ----------------------------------------------------------------------
             
         yaml.dump(self.kwargs_space, open(cache_file + "_kwargs_space.yaml", 'w'))
+        
+        # restore unecesary info for serialization --------------------------------
         
         for (kwargs_space_term, temp_corpus) in zip(self.kwargs_space['terms'], temp_corpuses):
             kwargs_space_term['corpus'] = temp_corpus                    
         
-        shelf.close()
+        for (kwargs_space_term, temp_source) in zip(self.kwargs_space['terms'], temp_sources):
+            kwargs_space_term['source'] = temp_source 
+        
+        # ----------------------------------------------------------------------
+        
         
     def load_space_properties_(self):
         
