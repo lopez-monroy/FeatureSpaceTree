@@ -48,11 +48,13 @@ from nltk.metrics import TrigramAssocMeasures
 from nltk.tag import StanfordTagger
 import Stemmer
 
+
 class Util(object):
 
     #shelf_ngram_char = shelve.open("TermNGramChar.txt", protocol=2)
     #shelf_ngram_word = shelve.open("TermNGramWord.txt", protocol=2)
     #shelf_regexp = shelve.open("TermRegExp.txt", protocol=2)
+    
 
     @staticmethod
     def get_the_regexp(kwargs):

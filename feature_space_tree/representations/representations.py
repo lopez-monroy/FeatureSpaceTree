@@ -1609,6 +1609,7 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         # PAN13 MODIFICATION -------------------------------------------
         matrix_concepts_terms = matrix_concepts_terms.transpose()
         norma=matrix_concepts_terms.sum(axis=0)
+        norma+=0.00000001
         matrix_concepts_terms=matrix_concepts_terms/norma
         matrix_concepts_terms = matrix_concepts_terms.transpose()
         # --------------------------------------------------------------
@@ -1647,7 +1648,7 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         '''
         mat = matrix.transpose()
         
-        debug = False        
+        debug = False       
         if debug:
             cache_file = "%s/%s" % (space.space_path, space.id_space)
             f_debug = open(cache_file + "_entropy_log.txt", "w")
