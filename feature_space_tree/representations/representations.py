@@ -1562,8 +1562,13 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         #matrix_concepts_terms = scipy.sparse.lil_matrix(numpy.zeros((len(space.categories), len(space._vocabulary)), 
         #                                                            dtype=numpy.float64))
 
-        
-        
+        ################################################################
+        # SUPER SPEED 
+        len_vocab = len(space._vocabulary)
+        unorder_dict_index = {}
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+        ###############################################################         
 
         i = 0
         for author in space.categories:
@@ -1578,28 +1583,45 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
                 docActualFd = nltk.FreqDist(tokens) #space.virtual_classes_holder_train[author].dic_file_fd[arch]
                 tamDoc = len(tokens)
                 total_terms_in_class += tamDoc
-                j = 0
-                for pal in space._vocabulary:
-                    if pal in docActualFd:
-                        #print str(freq) + " antes"
-#                        freq = math.log((1 + docActualFd[pal]), 10) / math.log(1+float(tamDoc),10)
-#                        freq = math.log((1 + docActualFd[pal] / float(tamDoc)), 10) / math.log(1+float(tamDoc),10) pesado original
-        #                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
-                        #print pal + " : "+ str(docActualFd[pal]) + " tamDoc:" +  str(float(tamDoc))
-                        ##### PAN13: freq = math.log((1.0 + docActualFd[pal] / float(1.0 + tamDoc)), 2)
-                        freq = docActualFd[pal]
-                        ##########################################
-                        # if freq == 0.0:
-                        #     freq=0.00000001
-                        ##########################################
-                        
-                        #print str(freq) + " despues"
-                    else:
-                        freq = 0
-        #                    terminos[j] += freq
-                    matrix_concepts_terms[i,j]+=freq
+                
+                ################################################################
+                # SUPER SPEED 
+                
+                for pal in docActualFd:
+                    
+                    freq = docActualFd[pal]
+                    matrix_concepts_terms[i, unorder_dict_index[pal]] += freq
+                    
+                
+                ################################################################
+                
+                ################################################################
+                # SUPER SLOW
+                
+# # # # #                 j = 0
+# # # # #                 for pal in space._vocabulary:
+# # # # #                     if pal in docActualFd:
+# # # # #                         #print str(freq) + " antes"
+# # # # # #                        freq = math.log((1 + docActualFd[pal]), 10) / math.log(1+float(tamDoc),10)
+# # # # # #                        freq = math.log((1 + docActualFd[pal] / float(tamDoc)), 10) / math.log(1+float(tamDoc),10) pesado original
+# # # # #         #                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
+# # # # #                         #print pal + " : "+ str(docActualFd[pal]) + " tamDoc:" +  str(float(tamDoc))
+# # # # #                         ##### PAN13: freq = math.log((1.0 + docActualFd[pal] / float(1.0 + tamDoc)), 2)
+# # # # #                         freq = docActualFd[pal]
+# # # # #                         ##########################################
+# # # # #                         # if freq == 0.0:
+# # # # #                         #     freq=0.00000001
+# # # # #                         ##########################################
+# # # # #                         
+# # # # #                         #print str(freq) + " despues"
+# # # # #                     else:
+# # # # #                         freq = 0
+# # # # #         #                    terminos[j] += freq
+# # # # #                     matrix_concepts_terms[i,j]+=freq
+# # # # # 
+# # # # #                     j += 1
 
-                    j += 1
+################################################################
 
             # matrix_concepts_terms[i] = matrix_concepts_terms[i]/total_terms_in_class     
             #set_printoptions(threshold='nan')
