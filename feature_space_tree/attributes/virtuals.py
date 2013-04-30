@@ -326,10 +326,10 @@ class VocabularyVirtualProcessor(VirtualProcessor):
             # First of all we save the original source            
             tmp_source = kwargs_term["source"]
             
-            # the max number of documents to process. This determines how much
+            # the max_l (max_local) number of documents to process. This determines how much
             # iterations we will perform (parts).
-            max=5000
-            parts = len(kwargs_term["source"])/max
+            max_l=5000
+            parts = len(kwargs_term["source"])/max_l
             
             #ensure at least one iteration
             if parts == 0:
@@ -343,9 +343,9 @@ class VocabularyVirtualProcessor(VirtualProcessor):
             for i in range(parts):
                 
                 if i == range(parts)[-1]:
-                    kwargs_term["source"] = tmp_source[a*max:]
+                    kwargs_term["source"] = tmp_source[a*max_l:]
                 else:
-                    kwargs_term["source"] = tmp_source[a*max:b*max]
+                    kwargs_term["source"] = tmp_source[a*max_l:b*max_l]
                 
                 a+=1
                 b+=1
@@ -388,8 +388,11 @@ class VocabularyVirtualProcessor(VirtualProcessor):
                     else:
                         fdist[token] = virtual_vocabulary_local.fdist[token]
             
-            print "unfiltered vocabulary size: ", len(fdist)            
+            print "unfiltered vocabulary size: ", len(fdist)    
+            
+            # restore the temp source        
             kwargs_term["source"] = tmp_source
+            
             vocabulary_object = VocabularyRaw(fdist)
             filtered_vocabulary = \
             Util.decorate_vocabulary_object(vocabulary_object,
