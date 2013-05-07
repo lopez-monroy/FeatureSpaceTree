@@ -1589,7 +1589,7 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
                 
                 for pal in docActualFd:
                     
-                    freq = docActualFd[pal]
+                    freq = math.log((1.0 + docActualFd[pal] / float(1.0 + tamDoc)), 2) #docActualFd[pal]
                     matrix_concepts_terms[i, unorder_dict_index[pal]] += freq
                     
                 
