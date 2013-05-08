@@ -432,4 +432,92 @@ class SkipSizeInfoFilterDecoratorByTokenNormalizer(DecoratorByTokenNormalizer):
         cols = int(old_list_of_tokens[1])
                      
         new_list_of_tokens = old_list_of_tokens[2:]
-        return new_list_of_tokens  
+        return new_list_of_tokens
+    
+
+class MaxPatternsByRowFilterDecoratorByTokenNormalizer(DecoratorByTokenNormalizer):
+    
+    max_patterns = None
+
+    def __init__(self, by_token_normalizer, path_to_max_patterns, a, b):
+        super(MaxPatternsByRowFilterDecoratorByTokenNormalizer, self).__init__(by_token_normalizer)
+        self.path_to_max_patterns = path_to_max_patterns
+        self.a = a
+        self.b = b
+        
+    def count_max_patterns_in_row(self, max_pattern, row):
+                
+        count = 0
+        
+        if len(set(max_pattern) & set(row)) == len(set(max_pattern)):
+        
+            index_max_pattern = 0
+            for elem_row in row:
+                
+                if elem_row == max_pattern[index_max_pattern]:
+                    
+                    index_max_pattern += 1
+                    
+                    # if you have found the last element of the pattern, then restart the index and count it.
+                    if index_max_pattern == len(max_pattern):
+                        index_max_pattern = 0
+                        count += 1
+                    
+        return count   
+
+    def get_list_of_tokens(self):
+        old_list_of_tokens = self._by_token_normalizer.get_list_of_tokens()
+        # print old_list_of_tokens
+        
+        # Read the list of max patterns ----------------------------------------
+        
+        max_patterns = []
+        if MaxPatternsByRowFilterDecoratorByTokenNormalizer.max_patterns == None:
+            f_of_max_patterns = open(self.path_to_max_patterns, "r")
+            
+            for line in f_of_max_patterns:
+                
+                elements = line.split()
+                
+                if int(elements[1]) >= self.a and int(elements[1]) <= self.b:
+                    max_patterns += [elements[2:]] 
+            
+            print "MAX_PATTERNS: ", max_patterns
+            MaxPatternsByRowFilterDecoratorByTokenNormalizer.max_patterns = max_patterns
+            f_of_max_patterns.close()
+        else:
+            max_patterns = MaxPatternsByRowFilterDecoratorByTokenNormalizer.max_patterns
+                
+        # ----------------------------------------------------------------------
+        
+        new_list_of_tokens = []
+        
+        rows = int(old_list_of_tokens[0])
+        cols = int(old_list_of_tokens[1])
+        tokens = old_list_of_tokens[2:]  
+        
+        base_mat = []
+        for i in range(rows):
+            
+            a = i*cols
+            b = i*cols + cols
+            
+            base_mat += [tokens[a:b]]
+            
+        # print base_mat
+        
+        if (len(base_mat) != rows) or (len(base_mat[0]) != cols) or (len(base_mat[-1]) != cols):
+            print "THE MATRIX HAS A STRANGE SIZE!!!, YOU SHOUL CHECK THIS CASE."
+            
+        for i in range(rows):
+            
+            for max_pattern in max_patterns:
+                freq = 0
+                freq = self.count_max_patterns_in_row(max_pattern, base_mat[i])
+                
+                tag_pattern = "~".join(max_pattern)
+                
+                new_list_of_tokens += [tag_pattern] * freq
+                
+        # print new_list_of_tokens
+        return new_list_of_tokens 

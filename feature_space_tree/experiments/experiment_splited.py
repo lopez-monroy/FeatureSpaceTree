@@ -121,7 +121,7 @@ def main_function():
 
     # FIXME: Here we are missing a validation for the arguments ...
     
-    nltk.data.path.append(os.getcwd() + "/nltk_data")
+    #nltk.data.path.append(os.getcwd() + "/nltk_data")
     
     parser = \
     argparse.ArgumentParser(description='Perform representation of train and test data in a separated way ',

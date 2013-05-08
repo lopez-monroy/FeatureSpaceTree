@@ -1,7 +1,7 @@
 FeatureSpaceTree
 ==========
 
-Author: Adrian Pastor Lopez-Monroy, M.Sc., <pastor@ccc.inaoep.mx>
+Author: Adrian Pastor Lopez-Monroy, Ph.D. Student, <pastor@ccc.inaoep.mx>
         Language Technologies Lab,
         Department of Computer Science,
         Instituto Nacional de Astrofísica, Óptica y Electrónica
@@ -60,7 +60,7 @@ $ simple_exp yaml_file_with_parameters.yaml
 
 KNOWN BUGS
 ==========
-
+** ALREADY FIXED :) ***
 An error in first the execution surely will appear. This is related to the path
 of the dir nltk_data, which should be installed in you home directory (if you
 follow installation instruction for the book material of the NLTK framework). 
