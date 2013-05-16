@@ -4,7 +4,7 @@ FeatureSpaceTree
 Author: Adrian Pastor Lopez-Monroy, Ph.D. Student, <pastor@ccc.inaoep.mx>
         Language Technologies Lab,
         Department of Computer Science,
-        Instituto Nacional de Astrofísica, Óptica y Electrónica
+        Instituto Nacional de Astrofísica, Óptica y Electrónica.
 
 Copyright (C) 2011-2013 FeatureSpaceTree Project
 For license information, see LICENSE.txt

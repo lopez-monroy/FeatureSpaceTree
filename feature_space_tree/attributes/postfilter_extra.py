@@ -507,7 +507,7 @@ class MaxPatternsByRowFilterDecoratorByTokenNormalizer(DecoratorByTokenNormalize
         # print base_mat
         
         if (len(base_mat) != rows) or (len(base_mat[0]) != cols) or (len(base_mat[-1]) != cols):
-            print "THE MATRIX HAS A STRANGE SIZE!!!, YOU SHOUL CHECK THIS CASE."
+            print "THE MATRIX HAS A STRANGE SIZE!!!, YOU SHOULD CHECK THIS CASE."
             
         for i in range(rows):
             
