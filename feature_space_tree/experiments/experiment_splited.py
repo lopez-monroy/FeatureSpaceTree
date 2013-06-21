@@ -143,6 +143,11 @@ def main_function():
                         action='store_true',
                         help='Assumes that there are all the training files needed for the test representation')
     
+    parser.add_argument('--no_report',
+                        dest='no_report',
+                        action='store_true',
+                        help='Do not print all log files.')
+    
     args = parser.parse_args()
     
     print "********************************************************************"
@@ -291,12 +296,15 @@ def main_function():
     else:
         is_train = False
     
-    report = representations.ReportPart()
-    report.generate_report_part(root,
-                                config_base.experiment_name,
-                                config_base.experiment_base_path,
-                                config_base.global_kwargs_list,
-                                is_train)
+    if args.no_report:
+        pass
+    else: 
+        report = representations.ReportPart()
+        report.generate_report_part(root,
+                                    config_base.experiment_name,
+                                    config_base.experiment_base_path,
+                                    config_base.global_kwargs_list,
+                                    is_train)
     #===========================================================================
 
     print "arguments in: " + experiment_config_path

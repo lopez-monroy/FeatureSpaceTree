@@ -1860,8 +1860,22 @@ class BOWMatrixHolder(MatrixHolder):
         
         len_vocab = len(space._vocabulary)
 
-        matrix_docs_terms = numpy.zeros((len(corpus_file_list), len_vocab),
+        Util.create_a_dir(space.space_path + "/sparse")
+        rows_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "rows_sparse.txt", "w")
+        columns_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "columns_sparse.txt", "w")
+        vals_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "vals_sparce.txt", "w")
+        
+        dense_flag = True
+        
+        if ('sparse' in space.kwargs_space) and space.kwargs_space['sparse']:            
+            matrix_docs_terms = numpy.zeros((1, 1),
                                         dtype=numpy.float64)
+            dense_flag = False
+        else:
+            matrix_docs_terms = numpy.zeros((len(corpus_file_list), len_vocab),
+                                        dtype=numpy.float64)
+            dense_flag = True
+        
         instance_categories = []
         instance_namefiles = []
         
@@ -1889,8 +1903,14 @@ class BOWMatrixHolder(MatrixHolder):
                         freq = docActualFd[pal] / float(tamDoc)
                     else:
                         freq = 0.0
-                        
-                    matrix_docs_terms[i, unorder_dict_index[pal]] = freq
+                    
+                    if dense_flag:
+                        matrix_docs_terms[i, unorder_dict_index[pal]] = freq
+                    
+                    if freq > 0.0:
+                        rows_file.write(str(i) + "\n")
+                        columns_file.write(str(unorder_dict_index[pal]) + "\n")
+                        vals_file.write(str(freq) + "\n")
                     
                 ################################################################
 
@@ -1925,6 +1945,10 @@ class BOWMatrixHolder(MatrixHolder):
         self._matrix = matrix_docs_terms
         self._instance_categories = instance_categories
         self._instance_namefiles = instance_namefiles
+        
+        rows_file.close()
+        columns_file.close()
+        vals_file.close()
 
         #print matConceptosTerm
 
