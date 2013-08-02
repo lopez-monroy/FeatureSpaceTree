@@ -31,6 +31,7 @@
 # ==============================================================================
 
 import math
+import sys
 import os
 import random
 import re
@@ -653,6 +654,53 @@ class FullFilesCorpus(FilterCorpus):
             author_file_list = self.get_corpus().fileids(categories=[cat])
             author_file_list = list(set(author_file_list) & set(old_train_docs))
             docs += author_file_list
+
+        docs.sort()
+        # PAN13: print docs
+        return docs
+    
+
+class StratifiedCrossFoldFilesCorpus(FilterCorpus):
+
+    def __init__(self, corpus, n_folds, target_fold, mode, seed):
+        """ 
+        mode is a string that could be: "train" or "test"
+        """
+        super(StratifiedCrossFoldFilesCorpus, self).__init__(corpus)
+        self.n_folds = n_folds
+        self.mode = mode
+        self.seed = seed
+        self.target_fold = target_fold
+
+    def get_docs(self):
+        old_train_docs = self._corpus.get_docs()
+        docs = []
+
+        for cat in self.get_categories():
+            author_file_list = self.get_corpus().fileids(categories=[cat])
+            author_file_list = list(set(author_file_list) & set(old_train_docs))
+            
+            
+            author_file_list = sorted(author_file_list)            
+            author_folds = [ e % self.n_folds for e in range(len(author_file_list))]
+            
+            random.seed(self.seed)
+            random.shuffle(author_folds)
+            
+            selected_author_files_list = []
+            for (author_file, author_fold) in zip(author_file_list, author_folds):
+                
+                if self.mode == "train":                    
+                    if author_fold != self.target_fold:
+                        selected_author_files_list += [author_file]                        
+                elif self.mode == "test":                    
+                    if author_fold == self.target_fold:
+                        selected_author_files_list += [author_file]
+                else:
+                    print "Error, you must specify the mode in str: train or test"
+                    sys.exit()
+            
+            docs += selected_author_files_list
 
         docs.sort()
         # PAN13: print docs
