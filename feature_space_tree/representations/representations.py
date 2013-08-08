@@ -441,7 +441,7 @@ class Util(object):
         f.close()
 
         return list_of_files
-    
+
     @staticmethod
     def getValidTokens_bak2(kwargs_term, set_vocabulary):
         factory_term_lex = FactoryTermLex()
@@ -486,7 +486,8 @@ class EnumFiltersCorpus(object):
 
     (SPECIFIC_FILES,
      IMBALANCE,
-     FULL) = range(3)
+     FULL,
+     STRATIFIED_CROSS_FOLD) = range(4)
 
 
 class FactorySimpleFilterCorpus(object):
@@ -496,15 +497,22 @@ class FactorySimpleFilterCorpus(object):
 
         option = eval(option)
         if option == EnumFiltersCorpus.SPECIFIC_FILES:
-            specific_files = Util.get_list_of_files(kwargs['specific_files_path'])
-            return SpecificFilesCorpus(corpus, specific_files)
+            if 'file_of_specific_paths' in kwargs:
+                specific_file_paths = Util.get_list_of_files(kwargs['file_of_specific_paths'])
+            return SpecificFilesCorpus(corpus, specific_file_paths)
 
         if option == EnumFiltersCorpus.IMBALANCE:
             return ImbalancedFilesCorpus(corpus, kwargs['imbalance'])
 
         if option == EnumFiltersCorpus.FULL:
             return FullFilesCorpus(corpus)
-
+        
+        if option == EnumFiltersCorpus.STRATIFIED_CROSS_FOLD:
+            return StratifiedCrossFoldFilesCorpus(corpus, 
+                                                  kwargs['n_folds'], 
+                                                  kwargs['target_fold'], 
+                                                  kwargs['mode'], 
+                                                  kwargs['seed'])
 
 
 class Corpus(object):
@@ -661,6 +669,8 @@ class FullFilesCorpus(FilterCorpus):
     
 
 class StratifiedCrossFoldFilesCorpus(FilterCorpus):
+    """This is BUGGY I have not tested yet!!!
+    """
 
     def __init__(self, corpus, n_folds, target_fold, mode, seed):
         """ 

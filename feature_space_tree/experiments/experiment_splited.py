@@ -318,6 +318,9 @@ def main_function():
     
     print "********************************************************************"
 
-if __name__ == '__main__':
+# These lines are useless since the script cannot be executed from this lines.
+# It does not detect the package feature_space_tree, and if I move the script
+# it is also useless
+#if __name__ == '__main__':
 
-    main_function()
+#    main_function()
