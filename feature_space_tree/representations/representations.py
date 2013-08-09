@@ -75,6 +75,50 @@ class bcolors(object):
 
 
 class Util(object):
+    
+    
+    # FIXME: Here there are a deging software error: As you can see the class
+    # CorpusCategorizedFromCatMap still receiving kwargs_corpus['cat_pattern']
+    # which is not necessary!!!. We have to rename the paremeters in the cons-
+    # tructor of the class Corpus. This is because the latter class, forces...
+    # (because it specyfies the parameters in the constructor) to all subclasses
+    # to use these parameters. The solution is could be: Just Leave more generic
+    # parameters (anyway subclass will specify them, or send it the complete
+    # kwargs object. 
+    @staticmethod
+    def build_filtered_corpus_from_cat_map(categories, kwargs_corpus):
+        if 'corpus_path' in kwargs_corpus and\
+        'corpus_pattern' in kwargs_corpus and\
+        'file_pattern' in kwargs_corpus and\
+        'cat_pattern' in kwargs_corpus:
+            corpus = CorpusCategorizedFromCatMap(categories,
+                                       kwargs_corpus['corpus_path'],
+                                       kwargs_corpus['corpus_pattern'],
+                                       kwargs_corpus['file_pattern'],
+                                       kwargs_corpus['cat_pattern'],
+                                       kwargs_corpus['cat_map'],)
+        else:
+            corpus = CorpusCategorizedFromCatMap(categories, kwargs_corpus['corpus_path'], kwargs_corpus['cat_map'])
+
+        corpus = Util.decorate_corpus(corpus, kwargs_corpus['filters_corpus'])
+        return corpus
+    
+    @staticmethod
+    def build_filtered_corpus(self, categories, kwargs_corpus):
+        if 'corpus_path' in kwargs_corpus and\
+        'corpus_pattern' in kwargs_corpus and\
+        'file_pattern' in kwargs_corpus and\
+        'cat_pattern' in kwargs_corpus:
+            corpus = CorpusCategorized(categories,
+                                       kwargs_corpus['corpus_path'],
+                                       kwargs_corpus['corpus_pattern'],
+                                       kwargs_corpus['file_pattern'],
+                                       kwargs_corpus['cat_pattern'])
+        else:
+            corpus = CorpusCategorized(categories, kwargs_corpus['corpus_path'])
+
+        corpus = Util.decorate_corpus(corpus, kwargs_corpus['filters_corpus'])
+        return corpus
 
     @staticmethod
     def get_tuples_from_fdist(fdist):
@@ -175,6 +219,21 @@ class Util(object):
 #                                         corpus)
         return corpus
 
+
+    @staticmethod
+    def configure_categorized_corpus_from_cat_map(corpus_path,
+                                                  cat_map,
+                                     user_corpus_path=r'corpora/(.*/.*)',
+                                     files_pattern=r'.+/.+',
+                                     categories_pattern=r'(.+)/.+'):
+
+        match = re.match(user_corpus_path,
+                         corpus_path)
+
+        corpus = LazyCorpusLoader(match.group(1),
+                                  CategorizedPlaintextCorpusReader,
+                                  files_pattern, cat_file=cat_map)
+        return corpus
 
     @staticmethod
     def configure_categorized_corpus(corpus_path,
@@ -577,6 +636,52 @@ class CorpusCategorized(Corpus):
 
     def build_corpus(self, corpus_path, user_corpus_path, files_pattern, categories_pattern):
         self._corpus = Util.configure_categorized_corpus(corpus_path, user_corpus_path, files_pattern, categories_pattern)
+        self.__docs = self._corpus.fileids(categories = self._categories)
+
+        # DEBUG: Uncomment if you want to see the selected documents
+        # print "CORPUS_PATH: " + self._corpus_path
+        # print "DOCUMENTS: " + str(self.__docs)
+        # print "CATEGORIES: " + str(self._categories)
+
+    def get_docs(self):
+        return self.__docs
+    
+
+class CorpusCategorizedFromCatMap(Corpus):
+
+    def __init__(self,
+                 categories,
+                 corpus_path,
+                 cat_map,
+                 user_corpus_path=r'corpora/(.*/.*)',
+                 files_pattern=r'.+/.+',
+                 categories_pattern=r'(.+)/.+'):
+        
+        # FIXME:
+        # BUG:
+        # This is not exactly a bug, but it is a possible source of bug.
+        # The class Corpus, in its constructor calls to build_corpus (it is a Template). 
+        # So, since the super class calls the method, AND because python is interpreted
+        # This class has not created the self.__cat_map attribute if it is not
+        # called before the super....__init__ 
+        self.__cat_map = cat_map
+        # ----------------------------------------------------------------------
+        
+        super(CorpusCategorizedFromCatMap, self).__init__(categories,
+                                                corpus_path,
+                                                user_corpus_path,
+                                                files_pattern,
+                                                categories_pattern)
+        
+        
+        
+        
+
+    def get_corpus(self):
+        return self._corpus
+
+    def build_corpus(self, corpus_path, user_corpus_path, files_pattern, categories_pattern):
+        self._corpus = Util.configure_categorized_corpus_from_cat_map(corpus_path, self.__cat_map, user_corpus_path, files_pattern)
         self.__docs = self._corpus.fileids(categories = self._categories)
 
         # DEBUG: Uncomment if you want to see the selected documents
@@ -1036,27 +1141,12 @@ class CorpusObject(object):
 
     def build_corpus(self):
         self.template_constructor.calc_corpus(self)
-        
-    def build_filtered_corpus(self, categories, kwargs_corpus):
-        if 'corpus_path' in kwargs_corpus and\
-        'corpus_pattern' in kwargs_corpus and\
-        'file_pattern' in kwargs_corpus and\
-        'cat_pattern' in kwargs_corpus:
-            corpus = CorpusCategorized(categories,
-                                       kwargs_corpus['corpus_path'],
-                                       kwargs_corpus['corpus_pattern'],
-                                       kwargs_corpus['file_pattern'],
-                                       kwargs_corpus['cat_pattern'])
-        else:
-            corpus = CorpusCategorized(categories, kwargs_corpus['corpus_path'])
-
-        corpus = Util.decorate_corpus(corpus, kwargs_corpus['filters_corpus'])
-        return corpus
 
 
 class EnumCommonTemplate(object):
     (UNIQUE,
-     TRAIN_TEST) = range(2)
+     TRAIN_TEST,
+     TRAIN_TEST_FROM_CAT_MAP) = range(3)
 
 
 class FactoryCorpusTemplate(object):
@@ -1077,6 +1167,9 @@ class FactoryCommonCorpusTemplate(FactoryCorpusTemplate):
             return UniqueCorpusTemplate()
         elif option == EnumCommonTemplate.TRAIN_TEST:
             return TrainTestCorpusTemplate()
+        elif option == EnumCommonTemplate.TRAIN_TEST_FROM_CAT_MAP:
+            return TrainTestCorpusFromCatMapTemplate()
+        
 
 
 class CorpusTemplate(object):
@@ -1092,11 +1185,11 @@ class UniqueCorpusTemplate(CorpusTemplate):
 
     def calc_corpus(self, corpus_object):
         corpus_object.filtered_train_corpus = \
-        corpus_object.build_filtered_corpus(corpus_object.categories,
+        Util.build_filtered_corpus(corpus_object.categories,
                                             corpus_object.kwargs_corpus['unique_corpus'])
 
         corpus_object.filtered_test_corpus = \
-        corpus_object.build_filtered_corpus(corpus_object.categories,
+        Util.build_filtered_corpus(corpus_object.categories,
                                             corpus_object.kwargs_corpus['null_corpus'])
 
 
@@ -1104,11 +1197,23 @@ class TrainTestCorpusTemplate(CorpusTemplate):
 
     def calc_corpus(self, corpus_object):
         corpus_object.filtered_train_corpus = \
-        corpus_object.build_filtered_corpus(corpus_object.categories,
+        Util.build_filtered_corpus(corpus_object.categories,
                                             corpus_object.kwargs_corpus['train_corpus'])
 
         corpus_object.filtered_test_corpus = \
-        corpus_object.build_filtered_corpus(corpus_object.categories,
+        Util.build_filtered_corpus(corpus_object.categories,
+                                            corpus_object.kwargs_corpus['test_corpus'])
+        
+
+class TrainTestCorpusFromCatMapTemplate(CorpusTemplate):
+
+    def calc_corpus(self, corpus_object):
+        corpus_object.filtered_train_corpus = \
+        Util.build_filtered_corpus_from_cat_map(corpus_object.categories,
+                                            corpus_object.kwargs_corpus['train_corpus'])
+
+        corpus_object.filtered_test_corpus = \
+        Util.build_filtered_corpus_from_cat_map(corpus_object.categories,
                                             corpus_object.kwargs_corpus['test_corpus'])
 
 
