@@ -280,7 +280,7 @@ class Util(object):
 #        return corpus
 
     @staticmethod
-    def write_arrf(path, attributes, categories, matrix, name_files, relation_name="my_relation"):
+    def write_arrf(path, attributes, categories, matrix, name_files,  instance_categories, relation_name="my_relation", f_namefiles=True):
         '''
         This creates a arrf header string ready to be written into a weka's arff file
         '''
@@ -304,9 +304,13 @@ class Util(object):
         f_arff.write(string_arff.encode('utf-8'))
         f_arff.close()
         
-
-        categories_of_files = [re.match('(.+)/.+', name_file).group(1)
-                               for name_file in name_files ]
+        if f_namefiles:
+            f_namefiles = open(path + ".txt", 'w')        
+        # Bad idea to other kinds of corpus, like CAT MAP CORPUS ---------------
+        # categories_of_files = [re.match('(.+)/.+', name_file).group(1)
+        #                        for name_file in name_files ]
+        # ----------------------------------------------------------------------
+        categories_of_files = instance_categories
 
         #categories_of_files = [re.match(".+_.+_.+_(.+)_.+", name_file).group(1)
         #                       for name_file in name_files ]
@@ -337,16 +341,20 @@ class Util(object):
             for e in row:
                 list_string_row += str(e) + ", "
 
-            name_file = "_".join(c.findall(name_file))
+            valid_arff_name_file = "_".join(c.findall(name_file))
 
             # the last good: name_file = "_".join(re.findall('[a-zA-Z0-9]+',name_file))
 
             # the last good: string_arff += ('%s, %-25s %s\n' % (list_string_row, category_of_file, name_file))
             # the last good: string_arff += ('%s %-25s %s\n' % (list_string_row, category_of_file, name_file))
             
-            f_arff.write((list_string_row + " " + category_of_file + "    " + name_file + "\n").encode('utf-8'))
+            f_arff.write((list_string_row + " " + category_of_file + "    " + valid_arff_name_file + "\n").encode('utf-8'))
+            if f_namefiles:
+                f_namefiles.write((name_file + " " + category_of_file + "\n").encode('utf-8'))
         
         f_arff.close()
+        if f_namefiles:
+            f_namefiles.close()
 
 # the last good:
 #        f_arff = open(path, 'w')
@@ -354,24 +362,36 @@ class Util(object):
 #        f_arff.close()
 
     @staticmethod
-    def write_bin_matrix(path, attributes, categories, matrix, name_files, relation_name="my_relation"):
+    def write_bin_matrix(path, attributes, categories, matrix, name_files, instance_categories, relation_name="my_relation"):
         
-        categories_of_files = [re.match('(.+)/.+', name_file).group(1)
-                               for name_file in name_files ]
-        
+        # Bad idea to other kinds of corpus, like CAT MAP CORPUS ---------------
+        # categories_of_files = [re.match('(.+)/.+', name_file).group(1)
+        #                        for name_file in name_files ]
+        # ----------------------------------------------------------------------
+        categories_of_files = instance_categories
         numpy.save(path + "_cats.npy", numpy.array(categories_of_files))
         
         numpy.save(path + "_data.npy", matrix)
 
     @staticmethod
-    def write_svmlib(path, attributes, categories, matrix, name_files, relation_name="my_relation"):
+    def write_svmlib(path, attributes, categories, matrix, name_files, instance_categories, relation_name="my_relation"):
         '''
         This creates a arrf header string ready to be written into a weka's arff file
-        '''       
+        BUGGY: I HAVE NOT VALIDATED THIS CODE
+        '''  
+        # BUG: I have not validated this code, so this could be buggy.     
         categories_of_files = []
         set_of_classes = []
-        for name_file in name_files:
-            class_name = re.match('(.+)/.+', name_file).group(1)
+        
+#         for name_file in name_files:
+#             class_name = re.match('(.+)/.+', name_file).group(1)
+#             categories_of_files += [class_name]
+#             
+#             if class_name not in set_of_classes:
+#                 set_of_classes += [class_name]
+
+        for name_file, instance_category in zip(name_files, instance_categories):
+            class_name = instance_category
             categories_of_files += [class_name]
             
             if class_name not in set_of_classes:
@@ -724,11 +744,14 @@ class SpecificFilesCorpus(FilterCorpus):
     def get_docs(self):
 
         old_train_docs = self._corpus.get_docs()
+        # print "DEBUGGING: " + str(old_train_docs)
         for train_doc in self.list_specific_files:
 
             if train_doc not in old_train_docs:
                 print("ERROR: file %s was not found in the train corpus." % train_doc)
                 return None
+            #else:
+            #    print "DEBUGGING :) ...", train_doc
 
         self.list_specific_files.sort()
         return self.list_specific_files
@@ -1249,6 +1272,7 @@ class ConfigBaseAdvanced(object):
 
         self.train_corpus = self.__filtered_train_corpus.get_corpus()
         self.test_corpus = self.__filtered_test_corpus.get_corpus()
+        # print "DEBUGGING X: ", self.train_corpus.categories()
         # ======================================================================
         
         # ======================================================================        
@@ -2426,14 +2450,16 @@ class Report(object):
                         space.get_attributes(),
                         space.get_categories(),
                         space.get_matrix_train(),
-                        space.get_train_files())
+                        space.get_train_files(),
+                        space.get_train_instance_categories())
 
         test_arrf_path = "%s/test_subspace%s_%s.arff" % (space.space_path, space.id_space, self.experiment_name)
         Util.write_arrf(test_arrf_path,
                         space.get_attributes(),
                         space.get_categories(),
                         space.get_matrix_test(),
-                        space.get_test_files())
+                        space.get_test_files(),
+                        space.get_test_instance_categories())
         
     def create_bin_matrices(self, space):
         train_bin_path = "%s/train_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
@@ -2441,14 +2467,16 @@ class Report(object):
                         space.get_attributes(),
                         space.get_categories(),
                         space.get_matrix_train(),
-                        space.get_train_files())
+                        space.get_train_files(),
+                        space.get_train_instance_categories())
 
         test_bin_path = "%s/test_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
         Util.write_bin_matrix(test_bin_path,
                         space.get_attributes(),
                         space.get_categories(),
                         space.get_matrix_test(),
-                        space.get_test_files())
+                        space.get_test_files(),
+                        space.get_test_instance_categories())
 
     def create_properties_files(self, space):
         
@@ -2638,14 +2666,16 @@ class ReportPart(object):
                             space.get_attributes(),
                             space.get_categories(),
                             space.get_matrix_train(),
-                            space.get_train_files())
+                            space.get_train_files(),
+                            space.get_train_instance_categories())
         else:
             test_arrf_path = "%s/test_subspace%s_%s.arff" % (space.space_path, space.id_space, self.experiment_name)
             Util.write_arrf(test_arrf_path,
                             space.get_attributes(),
                             space.get_categories(),
                             space.get_matrix_test(),
-                            space.get_test_files())
+                            space.get_test_files(),
+                            space.get_test_instance_categories())
         
     def create_bin_matrices_part(self, space):
         
@@ -2656,7 +2686,8 @@ class ReportPart(object):
                             space.get_attributes(),
                             space.get_categories(),
                             space.get_matrix_train(),
-                            space.get_train_files())
+                            space.get_train_files(),
+                            space.get_train_instance_categories())
             
             train_bin_path_extra = "%s/train_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
             numpy.save(train_bin_path_extra + "_instance_categories.npy", numpy.array(space.get_train_instance_categories()))
@@ -2668,7 +2699,8 @@ class ReportPart(object):
                             space.get_attributes(),
                             space.get_categories(),
                             space.get_matrix_test(),
-                            space.get_test_files())
+                            space.get_test_files(),
+                            space.get_test_instance_categories())
             
             test_bin_path_extra = "%s/test_subspace%s_%s" % (space.space_path, space.id_space, self.experiment_name)
             numpy.save(test_bin_path_extra + "_instance_categories.npy", numpy.array(space.get_test_instance_categories()))
