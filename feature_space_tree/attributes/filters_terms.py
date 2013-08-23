@@ -218,6 +218,32 @@ class PercentageRandomVocabulary(FilterVocabulary):
 
         return new_fdist_selected
     
+
+class SpecificTokensVocabulary(FilterVocabulary):
+    
+    def __init__(self, vocabulary_object, list_specific_tokens, validated=True):
+        '''
+        The validated parameter allows to include the tokens in list_specific_tokes
+        if and only if they appear in the vocabulary extracted from the document set (training set) 
+        '''
+        super(SpecificTokensVocabulary, self).__init__(vocabulary_object)
+        self.list_specific_tokens = list_specific_tokens
+        
+    def get_fdist_selected(self):
+        old_fdist_selected = \
+        super(SpecificTokensVocabulary, self).get_fdist_selected()
+        
+        # Here the order is irrelevant for the next list, since the FreqDist object
+        # in the next lines will sort the tokens by frequency :) (NLTK functionality)
+        new_vocabulary_selected = list(set(old_fdist_selected.keys()[:]) & set(self.list_specific_tokens))
+        # ----------------------------------------------------------------------
+
+        new_fdist_selected = nltk.FreqDist()
+        for token in new_vocabulary_selected:
+            new_fdist_selected[token] = old_fdist_selected[token]
+
+        return new_fdist_selected
+    
     
 # ==============================================================================    
 

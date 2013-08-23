@@ -493,9 +493,9 @@ class Util(object):
         if boolStem:
             tokens = Util.applyStem(tokens)
 
-        tagger = StanfordTagger('../lib/stanford-postagger-2012-01-06/models/' +
+        tagger = StanfordTagger('./lib/stanford-postagger-2012-01-06/models/' +
                                 'english-bidirectional-distsim.tagger',
-                                '../lib/stanford-postagger-2012-01-06/' +
+                                './lib/stanford-postagger-2012-01-06/' +
                                 'stanford-postagger.jar')
 
         tagged_tokens = tagger.tag(tokens)

@@ -44,6 +44,7 @@ import shelve
 import glob
 import codecs
 import yaml
+import json
 from abc import ABCMeta, abstractmethod
 
 import nltk
@@ -104,7 +105,7 @@ class Util(object):
         return corpus
     
     @staticmethod
-    def build_filtered_corpus(self, categories, kwargs_corpus):
+    def build_filtered_corpus(categories, kwargs_corpus):
         if 'corpus_path' in kwargs_corpus and\
         'corpus_pattern' in kwargs_corpus and\
         'file_pattern' in kwargs_corpus and\
@@ -828,10 +829,10 @@ class StratifiedCrossFoldFilesCorpus(FilterCorpus):
             selected_author_files_list = []
             for (author_file, author_fold) in zip(author_file_list, author_folds):
                 
-                if self.mode == "train":                    
+                if self.mode.strip() == "train":                    
                     if author_fold != self.target_fold:
                         selected_author_files_list += [author_file]                        
-                elif self.mode == "test":                    
+                elif self.mode.strip() == "test":                    
                     if author_fold == self.target_fold:
                         selected_author_files_list += [author_file]
                 else:
@@ -1192,7 +1193,6 @@ class FactoryCommonCorpusTemplate(FactoryCorpusTemplate):
             return TrainTestCorpusTemplate()
         elif option == EnumCommonTemplate.TRAIN_TEST_FROM_CAT_MAP:
             return TrainTestCorpusFromCatMapTemplate()
-        
 
 
 class CorpusTemplate(object):
@@ -2513,6 +2513,12 @@ class Report(object):
         #print type(str_vocabulary)
         f_vocabulary.write(str_vocabulary)
         f_vocabulary.close()
+        
+        # FIXME: These lines have not been debugged.
+        json_vocabulary = open("%s/vocabulary_subspace_Json%s_%s.json" % (space.space_path, space.id_space, self.experiment_name), 'w')
+        json.dump(space.get_fdist().keys(), json_vocabulary)
+        json_vocabulary.close()
+        # ----------------------------------------------------------------------
 
     def create_details_files(self, space):
         self.create_details(space.space_path,
@@ -2708,38 +2714,45 @@ class ReportPart(object):
 
     def create_properties_files_part(self, space):
         
-        f_vocabulary_1 = open("%s/%s_vocabulary_subspace%s_%s.txt" % (space.space_path, str(("Test", "Train")[self.part_train]), space.id_space, self.experiment_name), 'w')
-
-        vocabulary_tuples_1 = Util.get_tuples_from_fdist(space.get_fdist())            
-
-        str_vocabulary_1 = Util.build_fancy_list_string(vocabulary_tuples_1)
-        #print type(str_vocabulary)
-        #str_vocabulary = u'' + str_vocabulary
-        #print type(str_vocabulary)
-        f_vocabulary_1.write(str_vocabulary_1)
-        f_vocabulary_1.close()
+        if self.part_train:
+            f_vocabulary_1 = open("%s/%s_vocabulary_subspace%s_%s.txt" % (space.space_path, str(("Test", "Train")[self.part_train]), space.id_space, self.experiment_name), 'w')
         
+            vocabulary_tuples_1 = Util.get_tuples_from_fdist(space.get_fdist())            
         
-        f_vocabulary = open("%s/%s_vocabulary_subspace_Simple%s_%s.txt" % (space.space_path, str(("Test", "Train")[self.part_train]), space.id_space, self.experiment_name), 'w')
-
-        vocabulary_tuples_temp = Util.get_tuples_from_fdist(space.get_fdist())        
-        
-        vocabulary_tuples = []
-        for v_tuple in vocabulary_tuples_temp:
-            element = v_tuple[0]
-            number = v_tuple[1]
-            # PAN13: print "VOCABULARY ELEMENTS: "
-            # PAN13: print element.encode('utf-8')
-            # PAN13: print type(element)
-            vocabulary_tuples +=[(element.encode('utf-8'), number)]
+            str_vocabulary_1 = Util.build_fancy_list_string(vocabulary_tuples_1)
+            #print type(str_vocabulary)
+            #str_vocabulary = u'' + str_vocabulary
+            #print type(str_vocabulary)
+            f_vocabulary_1.write(str_vocabulary_1)
+            f_vocabulary_1.close()
             
-
-        str_vocabulary = Util.build_fancy_vocabulary(vocabulary_tuples)
-        #print type(str_vocabulary)
-        #str_vocabulary = u'' + str_vocabulary
-        #print type(str_vocabulary)
-        f_vocabulary.write(str_vocabulary)
-        f_vocabulary.close()
+            
+            f_vocabulary = open("%s/%s_vocabulary_subspace_Simple%s_%s.txt" % (space.space_path, str(("Test", "Train")[self.part_train]), space.id_space, self.experiment_name), 'w')
+        
+            vocabulary_tuples_temp = Util.get_tuples_from_fdist(space.get_fdist())        
+            
+            vocabulary_tuples = []
+            for v_tuple in vocabulary_tuples_temp:
+                element = v_tuple[0]
+                number = v_tuple[1]
+                # PAN13: print "VOCABULARY ELEMENTS: "
+                # PAN13: print element.encode('utf-8')
+                # PAN13: print type(element)
+                vocabulary_tuples +=[(element.encode('utf-8'), number)]
+                
+        
+            str_vocabulary = Util.build_fancy_vocabulary(vocabulary_tuples)
+            #print type(str_vocabulary)
+            #str_vocabulary = u'' + str_vocabulary
+            #print type(str_vocabulary)
+            f_vocabulary.write(str_vocabulary)
+            f_vocabulary.close()
+            
+            json_vocabulary =  open("%s/%s_vocabulary_subspace_json_%s_%s.json" % (space.space_path, str(("Test", "Train")[self.part_train]), space.id_space, self.experiment_name), 'w')
+            json.dump(space.get_fdist().keys(), json_vocabulary)
+            json_vocabulary.close()
+        else:
+            pass
 
     def create_details_files_part(self, space):
         

@@ -38,6 +38,7 @@
 # so, the preprocessing is slower. 
 # ------------------------------------------------------------------------------
 
+import json
 from abc import ABCMeta, abstractmethod
 from filters_terms import *
 
@@ -48,7 +49,8 @@ class EnumFiltersVocabulary(object):
      BIAS_FREQ,
      FIXED_RAND,
      PERCENTAGE_RAND,
-     TRANSPARENT) = range(6)
+     TRANSPARENT,
+     SPECIFIC_TOKENS) = range(7)
 
 
 class FactoryFilterVocabulary(object):
@@ -85,6 +87,17 @@ class FactorySimpleFilterVocabulary(FactoryFilterVocabulary):
         if option == EnumFiltersVocabulary.TRANSPARENT:
             return FilterVocabulary(vocabulary_object)
         
+        if option == EnumFiltersVocabulary.SPECIFIC_TOKENS:
+            validated = False
+            if "validated" in kwargs:
+                validated = kwargs["validated"]
+                
+            json_of_specific_tokens = open(kwargs["json_of_specific_tokens"], "r")
+            list_specific_tokens = json.load(json_of_specific_tokens)
+            json_of_specific_tokens.close()
+            
+            return SpecificTokensVocabulary(vocabulary_object, list_specific_tokens, validated)
+        
         
 class EnumFiltersTermsList(object):
 
@@ -93,8 +106,8 @@ class EnumFiltersTermsList(object):
      BIAS_FREQ,
      FIXED_RAND,
      PERCENTAGE_RAND,
-     ORDER,
-     TRANSPARENT) = range(7)
+     TRANSPARENT,
+     ORDER) = range(7)
 
 
 class FactorySimpleFilterTermsList(object):
