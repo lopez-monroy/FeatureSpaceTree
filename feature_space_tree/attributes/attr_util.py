@@ -493,10 +493,14 @@ class Util(object):
         if boolStem:
             tokens = Util.applyStem(tokens)
 
+        # This has change in NLTK!!!!
+        # now we have to use from nltk.tag.stanford import POSTagger
+        # che this out: http://nltk.org/api/nltk.tag.html#nltk.tag.stanford.StanfordTagger
         tagger = StanfordTagger('./lib/stanford-postagger-2012-01-06/models/' +
                                 'english-bidirectional-distsim.tagger',
                                 './lib/stanford-postagger-2012-01-06/' +
                                 'stanford-postagger.jar')
+        # ----------------------------------------------------------------------
 
         tagged_tokens = tagger.tag(tokens)
 
