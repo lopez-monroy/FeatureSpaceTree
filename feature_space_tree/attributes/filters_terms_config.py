@@ -50,7 +50,8 @@ class EnumFiltersVocabulary(object):
      FIXED_RAND,
      PERCENTAGE_RAND,
      TRANSPARENT,
-     SPECIFIC_TOKENS) = range(7)
+     SPECIFIC_TOKENS,
+     REMOVE_SPECIFIC_TOKENS) = range(8)
 
 
 class FactoryFilterVocabulary(object):
@@ -97,6 +98,17 @@ class FactorySimpleFilterVocabulary(FactoryFilterVocabulary):
             json_of_specific_tokens.close()
             
             return SpecificTokensVocabulary(vocabulary_object, list_specific_tokens, validated)
+        
+        if option == EnumFiltersVocabulary.REMOVE_SPECIFIC_TOKENS:
+            validated = False
+            if "validated" in kwargs:
+                validated = kwargs["validated"]
+                
+            json_of_specific_tokens = open(kwargs["json_of_specific_tokens"], "r")
+            list_specific_tokens = json.load(json_of_specific_tokens)
+            json_of_specific_tokens.close()
+            
+            return RemoveSpecificTokensVocabulary(vocabulary_object, list_specific_tokens, validated)
         
         
 class EnumFiltersTermsList(object):

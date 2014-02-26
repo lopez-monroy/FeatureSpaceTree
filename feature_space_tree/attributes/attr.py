@@ -180,6 +180,32 @@ class TermSplit(Terms):
 
     def calc_terms(self):
         return Util.calc_split(self.kwargs["string"])
+    
+
+class TermTag(Terms):
+
+    def __init__(self, kwargs_terms):
+        super(TermTag, self).__init__(kwargs_terms,
+                                         "TermTag")
+
+    def calc_terms(self):
+
+        the_regexp = ".+_(.+)"
+        if "regexp" in self.kwargs:
+            the_regexp = Util.get_the_regexp(self.kwargs)
+            
+        tokens = Util.calc_split(self.kwargs["string"])
+        tags = []
+        for token in tokens:
+            match = re.match(the_regexp, token)
+            if match == None:
+                pass 
+                # print token
+            else:
+                tag = match.group(1)
+                tags += [tag]      
+
+        return tags
 
 
 class TermNGramChar(Terms):
