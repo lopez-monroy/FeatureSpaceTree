@@ -58,17 +58,6 @@ If no errors, then congratulations you can use FeatureSpaceTree:
 
 $ simple_exp yaml_file_with_parameters.yaml
 
-KNOWN BUGS
-==========
-** ALREADY FIXED :) ***
-An error in first the execution surely will appear. This is related to the path
-of the dir nltk_data, which should be installed in you home directory (if you
-follow installation instruction for the book material of the NLTK framework). 
-This path in the source code representations.py has my path, which is:
-(/home/aplm/nltk_data/...), you should change this line with your path, in 
-order to use FeatureSpaceTree.  
-
-
 INTRODUCTION
 ============
 
@@ -86,7 +75,7 @@ filter on tokens extracted (e.g. apply lematization).
 3. - What representations will be used for these attributes, for example:
 	* Bag of Words (BoW)
 	* Latent Semantic Analysis (LSA)
-	* Concise Semantic Analysis (CSA)
+	* CSA
 	* Bag of Terms (BoT)
 	* Document Ocurrence Representation (DOR)
 	* Term Cocurrence Representation (TCOR)
