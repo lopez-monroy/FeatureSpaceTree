@@ -35,6 +35,7 @@ import copy
 
 import nltk
 from abc import ABCMeta, abstractmethod
+from ..representations.extensions import FreqDistExt
 
 # ------------------------------------------------------------------------------
 # The REALLY important classes here are all that contains the name vocabulary. This
@@ -98,9 +99,9 @@ class FixedTopVocabulary(FilterVocabulary):
     def get_fdist_selected(self):
         old_fdist_selected = \
         super(FixedTopVocabulary, self).get_fdist_selected()
-        new_vocabulary_selected = old_fdist_selected.keys()[:self.n_terms]
+        new_vocabulary_selected = old_fdist_selected.keys_sorted()[:self.n_terms]
 
-        new_fdist_selected = nltk.FreqDist()
+        new_fdist_selected = FreqDistExt()
         for token in new_vocabulary_selected:
             new_fdist_selected[token] = old_fdist_selected[token]
 
@@ -117,9 +118,9 @@ class PercentageTopVocabulary(FilterVocabulary):
         old_fdist_selected = \
         super(PercentageTopVocabulary, self).get_fdist_selected()
         new_vocabulary_selected = \
-        old_fdist_selected.keys()[:int(len(old_fdist_selected) * self.percentage)]
+        old_fdist_selected.keys_sorted()[:int(len(old_fdist_selected) * self.percentage)]
 
-        new_fdist_selected = nltk.FreqDist()
+        new_fdist_selected = FreqDistExt()
         for token in new_vocabulary_selected:
             new_fdist_selected[token] = old_fdist_selected[token]
 
@@ -137,10 +138,10 @@ class BiasFreqVocabulary(FilterVocabulary):
         super(BiasFreqVocabulary, self).get_fdist_selected()
         new_vocabulary_selected = \
         [token
-         for token in old_fdist_selected
+         for token in old_fdist_selected.keys_sorted()
          if old_fdist_selected[token] >= self.bias_freq]
 
-        new_fdist_selected = nltk.FreqDist()
+        new_fdist_selected = FreqDistExt()
         for token in new_vocabulary_selected:
             new_fdist_selected[token] = old_fdist_selected[token]
 
@@ -157,7 +158,7 @@ class FixedRandomVocabulary(FilterVocabulary):
     def get_fdist_selected(self):
         old_fdist_selected = \
         super(BiasFreqVocabulary, self).get_fdist_selected()
-        new_vocabulary_selected = old_fdist_selected.keys()
+        new_vocabulary_selected = old_fdist_selected.keys_sorted()
 
         #=======================================================================
         portion = int(len(new_vocabulary_selected)/self.caos)
@@ -174,7 +175,7 @@ class FixedRandomVocabulary(FilterVocabulary):
         new_vocabulary_selected = temp_new_vocabulary_selected
         #=======================================================================
 
-        new_fdist_selected = nltk.FreqDist()
+        new_fdist_selected = FreqDistExt()
         for token in new_vocabulary_selected:
             new_fdist_selected[token] = old_fdist_selected[token]
 
@@ -191,7 +192,7 @@ class PercentageRandomVocabulary(FilterVocabulary):
     def get_fdist_selected(self):
         old_fdist_selected = \
         super(BiasFreqVocabulary, self).get_fdist_selected()
-        new_vocabulary_selected = old_fdist_selected.keys()
+        new_vocabulary_selected = old_fdist_selected.keys_sorted()
         self.n_terms = len(new_vocabulary_selected) * self.percentage
 
         #=======================================================================
@@ -212,7 +213,7 @@ class PercentageRandomVocabulary(FilterVocabulary):
         new_vocabulary_selected = new_vocabulary_selected[:portion]
         #=======================================================================
 
-        new_fdist_selected = nltk.FreqDist()
+        new_fdist_selected = FreqDistExt()
         for token in new_vocabulary_selected:
             new_fdist_selected[token] = old_fdist_selected[token]
 
@@ -235,10 +236,10 @@ class SpecificTokensVocabulary(FilterVocabulary):
         
         # Here the order is irrelevant for the next list, since the FreqDist object
         # in the next lines will sort the tokens by frequency :) (NLTK functionality)
-        new_vocabulary_selected = list(set(old_fdist_selected.keys()[:]) & set(self.list_specific_tokens))
+        new_vocabulary_selected = list(set(old_fdist_selected.keys_sorted()[:]) & set(self.list_specific_tokens))
         # ----------------------------------------------------------------------
 
-        new_fdist_selected = nltk.FreqDist()
+        new_fdist_selected = FreqDistExt()
         for token in new_vocabulary_selected:
             new_fdist_selected[token] = old_fdist_selected[token]
 
@@ -258,10 +259,10 @@ class RemoveSpecificTokensVocabulary(FilterVocabulary):
         
         # Here the order is irrelevant for the next list, since the FreqDist object
         # in the next lines will sort the tokens by frequency :) (NLTK functionality)
-        new_vocabulary_selected = list(set(old_fdist_selected.keys()[:]) - set(self.list_specific_tokens))
+        new_vocabulary_selected = list(set(old_fdist_selected.keys_sorted()[:]) - set(self.list_specific_tokens))
         # ----------------------------------------------------------------------
 
-        new_fdist_selected = nltk.FreqDist()
+        new_fdist_selected = FreqDistExt()
         for token in new_vocabulary_selected:
             new_fdist_selected[token] = old_fdist_selected[token]
 
@@ -289,7 +290,7 @@ class TermsList(object):
 
     def set_tokens(self, value):
         self.__tokens = value
-        self._fdist = nltk.FreqDist(nltk.Text(value))
+        self._fdist = FreqDistExt(nltk.Text(value))
 
     def get_fdist(self):
         return self._fdist
@@ -301,7 +302,7 @@ class TermsListRaw(TermsList):
         super(TermsListRaw, self).__init__(tokens)
 
     def get_terms_selected(self):
-        return self._fdist.keys()
+        return self._fdist.keys_sorted()
 
 
 class FilterTermsList(TermsList):
@@ -440,7 +441,7 @@ class OrderTermsList(FilterTermsList):
     def get_terms_selected(self):
         terms_selected = self._terms_list.get_terms_selected()
         terms_selected = [term
-                          for term in self.get_fdist().keys()
+                          for term in self.get_fdist().keys_sorted()
                           if term in terms_selected]
 
         return terms_selected

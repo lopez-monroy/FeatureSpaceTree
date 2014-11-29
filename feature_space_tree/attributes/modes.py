@@ -68,15 +68,25 @@ class ModeCorpus(object):
 
         for f_src in terms.kwargs["source"]:
 
-            if f_src in shelf and terms.kwargs["lazy"]:
-                terms.tokens += shelf[f_src]
+            #print "ARCHIVO: " + f_src + " TYPE: " + str(type(f_src))
+            if str(f_src) in shelf and terms.kwargs["lazy"]:
+                terms.tokens += shelf[str(f_src)]
                 #print(str(f_src))
                 #print("%s ... Found in \"%s\"" % (f_src, cache_file))
             else:
                 # FIXME: This code is ok. However check how the "unicode" transformation
                 # should be included in each of the other "Modes"!!!!
-                terms.kwargs["string"] = \
-                unicode(terms.kwargs["corpus"].raw(fileids=[f_src]), 'utf-8') # .lower()
+                
+                # print type(terms.kwargs["corpus"].raw(fileids=[f_src]))
+                # print f_src
+                
+                # terms.kwargs["string"] = \
+                # unicode(terms.kwargs["corpus"].raw(fileids=[f_src]), 'utf-8', errors='ignore') # .lower()
+                
+                # terms.kwargs["string"] = \
+                # terms.kwargs["corpus"].raw(fileids=[f_src]).encode('utf-8', 'ignore') # .lower()
+                
+                terms.kwargs["string"] = terms.kwargs["corpus"].raw(fileids=[f_src]) # .lower()
 
                 # Apply all RawStringNormalizers -------------------------------
 
@@ -116,7 +126,7 @@ class ModeCorpus(object):
                 terms.tokens += temp_tokens
 
                 if terms.kwargs["lazy"]:
-                    shelf[f_src] = temp_tokens
+                    shelf[str(f_src)] = temp_tokens
 
                 #print ("%s ... Recalculated in \"%s\"" % (f_src, cache_file))
         shelf.close()

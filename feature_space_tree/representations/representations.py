@@ -58,6 +58,7 @@ from _pyio import __metaclass__
 from aptsources.distinfo import Template
 from ..attributes.virtuals \
 import FilterTermsVirtualGlobalProcessor, FilterTermsVirtualReProcessor
+from ..representations.extensions import FreqDistExt
 
 class bcolors(object):
     HEADER = '\033[95m'
@@ -74,7 +75,7 @@ class bcolors(object):
         self.WARNING = ''
         self.FAIL = ''
         self.ENDC = ''
-
+        
 
 class Util(object):
     
@@ -168,7 +169,7 @@ class Util(object):
     @staticmethod
     def get_tuples_from_fdist(fdist):
         the_tuples = []
-        for key in fdist.keys():
+        for key in fdist.keys_sorted():
             #print str(type(key)) + u":>>>" + key
             elem_tuple = (key, fdist[key])
             the_tuples += [elem_tuple]
@@ -1243,7 +1244,7 @@ class VirtualCategoriesHolder_bak(object):
 
             num_tokens_cat = len(tokens_cat)
 
-            fd_vocabulary_cat = nltk.FreqDist(tokens_cat)
+            fd_vocabulary_cat = FreqDistExt(tokens_cat)
 
             dic_file_tokens = {}
             dic_file_fd = {}
@@ -1261,7 +1262,7 @@ class VirtualCategoriesHolder_bak(object):
 
                 dic_file_tokens[author_file] = list_file_tokens_combined
                 dic_file_fd[author_file] = \
-                nltk.FreqDist(dic_file_tokens[author_file])
+                FreqDistExt(dic_file_tokens[author_file])
 #                print "**********************************5555"
 #                print author_file
 #                print dic_file_fd[author_file]
@@ -1789,7 +1790,7 @@ class CSAMatrixHolder(MatrixHolder):
             archivos = virtual_classes_holder[author].cat_file_list
             for arch in archivos:
                 tokens = virtual_classes_holder[author].dic_file_tokens[arch]
-                docActualFd = nltk.FreqDist(tokens) #virtual_classes_holder[author].dic_file_fd[arch]
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[author].dic_file_fd[arch]
                 tam_doc = len(tokens)
 
 ######                if len(tokens) == 0:
@@ -1804,7 +1805,7 @@ class CSAMatrixHolder(MatrixHolder):
                 #self.weight_matrix(space, author, tokens, docActualFd, matrix_concepts_docs, 0, k, matrix_concepts_terms)
                 ################################################################
                 # SUPER SPEED 
-                for pal in docActualFd:
+                for pal in docActualFd.keys_sorted():
                     
                     if (pal in unorder_dict_index):
                         weigh = docActualFd[pal] / float(tam_doc)
@@ -1849,7 +1850,7 @@ class CSAMatrixHolder(MatrixHolder):
 #        docActualFd=FreqDist(tokens)
         tamDoc=len(tokens)
         freqrank={}
-        for e in docActualFd.keys():
+        for e in docActualFd.keys_sorted():
             if str(docActualFd[e]) in freqrank.keys():
                 freqrank[str(docActualFd[e])]+=1
             else:
@@ -1961,14 +1962,14 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
                 #print arch
 
                 tokens = space.virtual_classes_holder_train[author].dic_file_tokens[arch]
-                docActualFd = nltk.FreqDist(tokens) #space.virtual_classes_holder_train[author].dic_file_fd[arch]
+                docActualFd = FreqDistExt(tokens) #space.virtual_classes_holder_train[author].dic_file_fd[arch]
                 tamDoc = len(tokens)
                 total_terms_in_class += tamDoc
                 
                 ################################################################
                 # SUPER SPEED 
                 
-                for pal in docActualFd:
+                for pal in docActualFd.keys_sorted():
                     
                     freq = math.log((1.0 + docActualFd[pal] / float(1.0 + tamDoc)), 2) #docActualFd[pal]
                     matrix_concepts_terms[i, unorder_dict_index[pal]] += freq
@@ -2131,13 +2132,13 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
             f_debug.write("after_vocab: " + str(new_vocabulary) + "\n")                
             f_debug.write("before_fdist: " + str(space._fdist) + "\n")
             
-        new_fdist = nltk.FreqDist()
+        new_fdist = FreqDistExt()
         for term in new_vocabulary:
             new_fdist[term] = space._fdist[term]
         
         if debug:
             f_debug.write("after_fdist: " + str(new_fdist) + "\n")
-            f_debug.write("final_vocab: " + str(new_fdist.keys()) + "\n")
+            f_debug.write("final_vocab: " + str(new_fdist.keys_sorted()) + "\n")
             f_debug.close()
          
         # ----------------------------------------------------------------------
@@ -2273,12 +2274,12 @@ class BOWMatrixHolder(MatrixHolder):
             archivos = virtual_classes_holder[autor].cat_file_list
             for arch in archivos:
                 tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
-                docActualFd = nltk.FreqDist(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
                 tamDoc = len(tokens)
                 
                 ################################################################
                 # SUPER SPEED 
-                for pal in docActualFd:
+                for pal in docActualFd.keys_sorted():
                     
                     if (pal in unorder_dict_index) and tamDoc > 0:
                         freq = docActualFd[pal] / float(tamDoc)
@@ -2423,12 +2424,12 @@ class LSIMatrixHolder(MatrixHolder):
             archivos = virtual_classes_holder[autor].cat_file_list
             for arch in archivos:
                 tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
-                docActualFd = nltk.FreqDist(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
                 tamDoc = len(tokens)
 
                 j = 0
                 for pal in space._vocabulary:
-                    if pal in docActualFd:
+                    if pal in docActualFd.keys_sorted():
                         #print str(freq) + " antes"
                         freq = docActualFd[pal] #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
 #                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
@@ -2710,7 +2711,7 @@ class Report(object):
         
         # FIXME: These lines have not been debugged.
         json_vocabulary = open("%s/vocabulary_subspace_Json%s_%s.json" % (space.space_path, space.id_space, self.experiment_name), 'w')
-        json.dump(space.get_fdist().keys(), json_vocabulary)
+        json.dump(space.get_fdist().keys_sorted(), json_vocabulary)
         json_vocabulary.close()
         # ----------------------------------------------------------------------
 
@@ -2943,7 +2944,7 @@ class ReportPart(object):
             f_vocabulary.close()
             
             json_vocabulary =  open("%s/%s_vocabulary_subspace_json_%s_%s.json" % (space.space_path, str(("Test", "Train")[self.part_train]), space.id_space, self.experiment_name), 'w')
-            json.dump(space.get_fdist().keys(), json_vocabulary)
+            json.dump(space.get_fdist().keys_sorted(), json_vocabulary)
             json_vocabulary.close()
         else:
             pass
@@ -3141,7 +3142,7 @@ class SpaceComponent(object):
     def update_and_save_fdist_and_vocabulary(self, new_fdist):
         
         self._fdist = new_fdist
-        self._vocabulary = self._fdist.keys() 
+        self._vocabulary = self._fdist.keys_sorted() 
         
         Util.create_a_dir(self.space_path)
         
@@ -3365,7 +3366,7 @@ class SpaceComponent(object):
         if (self.processing_option == virtuals.EnumTermsProcessing.FULL):
             self.tokens = virtual_global_processor.tokens
 
-        self._vocabulary = self._fdist.keys()
+        self._vocabulary = self._fdist.keys_sorted()
         #self._fdist = nltk.FreqDist(self.tokens)FULL
         #self._vocabulary = self._fdist.keys()
         #print self._vocabulary

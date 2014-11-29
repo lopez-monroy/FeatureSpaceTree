@@ -38,6 +38,7 @@ from ..attributes.attr_config import FactoryTermLex
 from ..attributes.filters_terms_config import FactorySimpleFilterVocabulary, FactorySimpleFilterTermsList
 from ..attributes.filters_terms import TermsListRaw, VocabularyRaw
 
+from ..representations.extensions import FreqDistExt
 # ------------------------------------------------------------------------------
 # The REALLY important classes here are all that contains the name vocabulary. This
 # is since they are used when the PROPROCESSING_OPTION is set to SIMPLE, this
@@ -304,8 +305,8 @@ class TermsVirtualProcessor(VirtualProcessor):
         for virtual_term in self.virtual_elements:
             self.tokens += virtual_term.tokens
 
-        self.fdist = nltk.FreqDist(self.tokens)
-        self.vocabulary = self.fdist.keys()
+        self.fdist = FreqDistExt(self.tokens)
+        self.vocabulary = self.fdist.keys_sorted()
         # ======================================================================
 
 
@@ -358,7 +359,7 @@ class VocabularyVirtualProcessor(VirtualProcessor):
                 
                 # 2.- convert those terms into a dict
                 print i,"SUBSTEP: 2"    
-                vocabulary_object_local = VocabularyRaw(nltk.FreqDist(term.tokens))
+                vocabulary_object_local = VocabularyRaw(FreqDistExt(term.tokens))
                 
                 # 3.- apply all filters
                 print i,"SUBSTEP: 3"    
@@ -378,10 +379,10 @@ class VocabularyVirtualProcessor(VirtualProcessor):
             
             # Here we will join all "local" vocabularies    
             print i,"SUBSTEP: 6"            
-            fdist = nltk.FreqDist()
+            fdist = FreqDistExt()
             for virtual_vocabulary_local in virtual_elements_local:
     
-                for token in virtual_vocabulary_local.fdist:
+                for token in virtual_vocabulary_local.fdist.keys_sorted():
     
                     if token in fdist:
                         fdist[token] += virtual_vocabulary_local.fdist[token]
@@ -409,12 +410,12 @@ class VocabularyVirtualProcessor(VirtualProcessor):
         # ======================================================================
         
         print "SUPRASTEP: 7"
-        fdist = nltk.FreqDist()
+        fdist = FreqDistExt()
         for virtual_vocabulary in self.virtual_elements:
 
-            for token in virtual_vocabulary.fdist:
+            for token in virtual_vocabulary.fdist.keys_sorted():
 
-                if token in fdist:
+                if token in fdist.keys_sorted():
                     fdist[token] += virtual_vocabulary.fdist[token]
                 else:
                     fdist[token] = virtual_vocabulary.fdist[token]
@@ -423,7 +424,7 @@ class VocabularyVirtualProcessor(VirtualProcessor):
 
         print "SUBSTEP: 8"
         self.fdist = fdist
-        self.vocabulary = self.fdist.keys()
+        self.vocabulary = self.fdist.keys_sorted()
         # ======================================================================
 
 class VocabularyVirtualProcessor_bak(VirtualProcessor):
@@ -442,7 +443,7 @@ class VocabularyVirtualProcessor_bak(VirtualProcessor):
             self._factory_term_lex.build_tokens(kwargs_term['type_term'],
                                                  kwargs_term)
 
-            vocabulary_object = VocabularyRaw(nltk.FreqDist(term.tokens))
+            vocabulary_object = VocabularyRaw(FreqDistExt(term.tokens))
 
             filtered_vocabulary = \
             Util.decorate_vocabulary_object(vocabulary_object,
@@ -458,12 +459,12 @@ class VocabularyVirtualProcessor_bak(VirtualProcessor):
         # This block computes the fdist of all of the virtual_elements and 
         # creates a new one that includes all.
         # ======================================================================
-        fdist = nltk.FreqDist()
+        fdist = FreqDistExt()
         for virtual_vocabulary in self.virtual_elements:
 
-            for token in virtual_vocabulary.fdist:
+            for token in virtual_vocabulary.fdist.keys_sorted():
 
-                if token in fdist:
+                if token in fdist.keys_sorted():
                     fdist[token] += virtual_vocabulary.fdist[token]
                 else:
                     fdist[token] = virtual_vocabulary.fdist[token]
@@ -471,7 +472,7 @@ class VocabularyVirtualProcessor_bak(VirtualProcessor):
         #print "SSSSSSSSSS:" +str(fdist)
 
         self.fdist = fdist
-        self.vocabulary = self.fdist.keys()
+        self.vocabulary = self.fdist.keys_sorted()()
         # ======================================================================
         
 class VirtualElement(object):
@@ -489,8 +490,8 @@ class VirtualTerm(VirtualElement):
         super(VirtualTerm, self).__init__(kwargs_term)
         self.string_description = description+str(kwargs_term)
         self.tokens = tokens
-        self.fdist = nltk.FreqDist(self.tokens)
-        self.vocabulary = self.fdist.keys()
+        self.fdist = FreqDistExt(self.tokens)
+        self.vocabulary = self.fdist.keys_sorted()
 
 class VirtualVocabulary(VirtualElement):
 
@@ -498,7 +499,7 @@ class VirtualVocabulary(VirtualElement):
         super(VirtualVocabulary, self).__init__(kwargs_term)
         self.string_description = description + str(kwargs_term)
         self.fdist = fdist
-        self.vocabulary = self.fdist.keys()
+        self.vocabulary = self.fdist.keys_sorted()
 
 class VirtualReProcessor(object):
 
@@ -536,8 +537,8 @@ class FilterTermsVirtualReProcessor(VirtualReProcessor):
         for virtual_term in self.new_virtual_elements:
             self.tokens += virtual_term.tokens
 
-        self.fdist = nltk.FreqDist(self.tokens)
-        self.vocabulary = self.fdist.keys()
+        self.fdist = FreqDistExt(self.tokens)
+        self.vocabulary = self.fdist.keys_sorted()
         # ======================================================================
 
 
@@ -563,17 +564,17 @@ class FilterVocabularyVirtualReProcessor(VirtualReProcessor):
         # ======================================================================
         # This block computes the fdist
         # ======================================================================
-        fdist = nltk.FreqDist()
+        fdist = FreqDistExt()
         for virtual_vocabulary in self.new_virtual_elements:
             for token in virtual_vocabulary.fdist:
 
-                if(token in fdist):
+                if(token in fdist.keys_sorted()):
                     fdist[token] += virtual_vocabulary.fdist[token]
                 else:
                     fdist[token] = virtual_vocabulary.fdist[token]
 
         self.fdist = fdist
-        self.vocabulary = self.fdist.keys()
+        self.vocabulary = self.fdist.keys_sorted()
         # ======================================================================
 
 class VirtualGlobalProcessor(object):
@@ -597,8 +598,8 @@ class FilterTermsVirtualGlobalProcessor(VirtualGlobalProcessor):
         for virtual_term in self.virtual_elements:
             self.all_tokens += virtual_term.tokens
 
-        self.all_fdist = nltk.FreqDist(self.all_tokens)
-        self.all_vocabulary = self.all_fdist.keys()
+        self.all_fdist = FreqDistExt(self.all_tokens)
+        self.all_vocabulary = self.all_fdist.keys_sorted()
         # ======================================================================
 
         # ================================kwargs_terms==========================
@@ -610,8 +611,8 @@ class FilterTermsVirtualGlobalProcessor(VirtualGlobalProcessor):
                                  self.global_kwargs_filters_terms)
 
         self.tokens = filtered_terms_list.get_filtered_tokens()
-        self.fdist = nltk.FreqDist(self.tokens)
-        self.vocabulary = self.fdist.keys()
+        self.fdist = FreqDistExt(self.tokens)
+        self.vocabulary = self.fdist.keys_sorted()
         # ======================================================================
 
 
@@ -625,17 +626,17 @@ class FilterVocabularyVirtualGlobalProcessor(VirtualGlobalProcessor):
         # This block computes the fdist
         # ======================================================================
 
-        fdist = nltk.FreqDist()
+        fdist = FreqDistExt()
         for virtual_vocabulary in self.virtual_elements:
 
-            for token in virtual_vocabulary.fdist:
-                if(token in fdist):
+            for token in virtual_vocabulary.fdist.keys_sorted():
+                if(token in fdist.keys_sorted()):
                     fdist[token] += virtual_vocabulary.fdist[token]
                 else:
                     fdist[token] = virtual_vocabulary.fdist[token]
 
         self.all_fdist = fdist
-        self.all_vocabulary = self.all_fdist.keys()
+        self.all_vocabulary = self.all_fdist.keys_sorted()
         # ======================================================================
 
         # ======================================================================
@@ -651,7 +652,7 @@ class FilterVocabularyVirtualGlobalProcessor(VirtualGlobalProcessor):
         fdist = filtered_vocabualary_object.get_fdist_selected()
 
         self.fdist = fdist
-        self.vocabulary = self.fdist.keys()
+        self.vocabulary = self.fdist.keys_sorted()
 
         # ======================================================================
 
@@ -774,5 +775,5 @@ class VirtualTermSSSRProcessor(object):
 
         self.string_description = "SSSR_" + str(global_kwargs_filter_terms)
         self.tokens = filtered_term_list_sssr.get_filtered_tokens()
-        self.fdist = nltk.FreqDist(self.tokens)
-        self.vocabulary = self.fdist.keys()
+        self.fdist = FreqDistExt(self.tokens)
+        self.vocabulary = self.fdist.keys_sorted()
