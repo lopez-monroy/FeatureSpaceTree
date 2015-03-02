@@ -45,6 +45,9 @@ import glob
 import codecs
 import yaml
 import json
+
+from gensim import corpora, models, similarities
+
 from abc import ABCMeta, abstractmethod
 
 import nltk
@@ -56,6 +59,7 @@ from ..attributes.attr_config import FactoryTermLex
 from ..attributes import virtuals
 from _pyio import __metaclass__
 from aptsources.distinfo import Template
+from boto.ec2.cloudwatch.dimension import Dimension
 from ..attributes.virtuals \
 import FilterTermsVirtualGlobalProcessor, FilterTermsVirtualReProcessor
 from ..representations.extensions import FreqDistExt
@@ -1529,16 +1533,17 @@ class ConfigBase(object):
 class EnumRepresentation(object):
 
     (BOW,
-     CSA) = range(2)
+     CSA,
+     LSA) = range(3)
 
 class AttributeHeader(object):
 
     _metaclass_ = ABCMeta
 
-    def __init__(self, fdist, vocabulary, categories):
+    def __init__(self, fdist, vocabulary, concepts):
         self._fdist = fdist
         self._vocabulary = vocabulary
-        self._categories = categories
+        self._concepts = concepts
 
     @abstractmethod
     def get_attributes(self):
@@ -1560,7 +1565,16 @@ class AttributeHeaderCSA(AttributeHeader):
         super(AttributeHeaderCSA, self).__init__(fdist, vocabulary, categories)
 
     def get_attributes(self):
-        return self._categories
+        return self._concepts
+    
+    
+class AttributeHeaderLSA(AttributeHeader):
+
+    def __init_(self, fdist, vocabulary, concepts):
+        super(AttributeHeaderLSA, self).__init__(fdist, vocabulary, concepts)
+
+    def get_attributes(self):        
+        return self._concepts
 
 
 class FactoryRepresentation(object):
@@ -1584,14 +1598,17 @@ class FactorySimpleRepresentation(FactoryRepresentation):
 
         if option == EnumRepresentation.CSA:
             return FactoryCSARepresentation()
+        
+        if option == EnumRepresentation.LSA:
+            return FactoryLSARepresentation()
 
 
 class AbstractFactoryRepresentation(object):
 
     __metaclass__ = ABCMeta
 
-    def build_attribute_header(self, fdist, vocabulary, categories):
-        return self.create_attribute_header(fdist, vocabulary, categories)
+    def build_attribute_header(self, fdist, vocabulary, concepts):
+        return self.create_attribute_header(fdist, vocabulary, concepts)
 
     def build_matrix_train_holder(self, space):
         return self.create_matrix_train_holder(space)
@@ -1600,7 +1617,7 @@ class AbstractFactoryRepresentation(object):
         return self.create_matrix_test_holder(space)
 
     @abstractmethod
-    def create_attribute_header(self, fdist, vocabulary, categories):
+    def create_attribute_header(self, fdist, vocabulary, concepts):
         pass
 
     @abstractmethod
@@ -1646,7 +1663,7 @@ class FactoryBOWRepresentation(AbstractFactoryRepresentation):
             numpy.save(cache_file + "_instance_categories.npy", 
                        self.__bow_train_matrix_holder.get_instance_categories())
         else:
-            print "ERROR: There is not a train matrix terms concepts built"
+            print "ERROR BOW: There is not a train matrix terms concepts built"
 
     def load_train_data(self, space):
         cache_file = "%s/%s" % (space.space_path, space.id_space)
@@ -1690,7 +1707,7 @@ class FactoryCSARepresentation(AbstractFactoryRepresentation):
             numpy.save(cache_file + "_instance_categories.npy", 
                        self.__csa_train_matrix_holder.get_instance_categories())
         else:
-            print "ERROR: There is not a train matrix terms concepts built"
+            print "ERROR CSA: There is not a train matrix terms concepts built"
             
     def load_train_data(self, space):
         
@@ -1702,7 +1719,51 @@ class FactoryCSARepresentation(AbstractFactoryRepresentation):
         self.__csa_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
         self.__csa_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
         
-        return self.__csa_train_matrix_holder      
+        return self.__csa_train_matrix_holder     
+    
+    
+class FactoryLSARepresentation(AbstractFactoryRepresentation):
+
+    def create_attribute_header(self, fdist, vocabulary, concepts):
+        return AttributeHeaderLSA(fdist, vocabulary, concepts)
+
+    def create_matrix_train_holder(self, space):        
+        self.__lsa_train_matrix_holder = LSATrainMatrixHolder(space) 
+        return self.__lsa_train_matrix_holder 
+
+    def create_matrix_test_holder(self,space):
+        self.__lsa_test_matrix_holder = LSATestMatrixHolder(space) 
+        return self.__lsa_test_matrix_holder
+    
+    def save_train_data(self, space):
+        
+        if self.__lsa_train_matrix_holder is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            numpy.save(cache_file + "_mat_terms_concepts.npy", 
+                       self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
+            
+            numpy.save(cache_file + "_mat_docs_concepts.npy", 
+                       self.__lsa_train_matrix_holder.get_matrix())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.__lsa_train_matrix_holder.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.__lsa_train_matrix_holder.get_instance_categories())
+        else:
+            print "ERROR LSA: There is not a train matrix terms concepts built"
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        self.__lsa_train_matrix_holder = LSATrainMatrixHolder(space)        
+        self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        self.__lsa_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
+        self.__lsa_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        self.__lsa_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+        
+        return self.__lsa_train_matrix_holder     
 
 
 class MatrixHolder(object):
@@ -2401,10 +2462,298 @@ class BOWTestMatrixHolder(BOWMatrixHolder):
         self._instance_namefiles = value
 
 
-class LSIMatrixHolder(MatrixHolder):
+class LSAMatrixHolder(MatrixHolder):
+
+    def __init__(self, space, tfidf=None, lsa=None):
+        super(LSAMatrixHolder, self).__init__()
+        self.space = space
+        self.bow_corpus = None
+        self.id2word = None
+        self.tfidf = tfidf
+        self.lsa = lsa
+        self.corpus_tfidf = None
+        self.corpus_lsa = None        
+        
+    def build_bowcorpus_id2word(self,
+                          space,
+                          virtual_classes_holder,
+                          corpus_file_list):
+
+        t1 = time.time()
+        print "Starting BOW representation..."
+        
+        len_vocab = len(space._vocabulary)
+
+        Util.create_a_dir(space.space_path + "/sparse")
+        rows_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "rows_sparse.txt", "w")
+        columns_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "columns_sparse.txt", "w")
+        vals_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "vals_sparce.txt", "w")
+        
+        dense_flag = True
+        
+        if ('sparse' in space.kwargs_space) and space.kwargs_space['sparse']:            
+            matrix_docs_terms = numpy.zeros((1, 1),
+                                        dtype=numpy.float64)
+            dense_flag = False
+        else:
+            matrix_docs_terms = numpy.zeros((len(corpus_file_list), len_vocab),
+                                        dtype=numpy.float64)
+            dense_flag = True
+        
+        instance_categories = []
+        instance_namefiles = []
+        
+        ################################################################
+        # SUPER SPEED 
+        unorder_dict_index = {}
+        id2word = {}
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+            id2word[u] = term
+        ###############################################################    
+        
+        corpus_bow = []    
+        i = 0      
+        for autor in space.categories:
+            archivos = virtual_classes_holder[autor].cat_file_list
+            for arch in archivos:
+                tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
+                tamDoc = len(tokens)
+                
+                ################################################################
+                # SUPER SPEED 
+                bow = []
+                for pal in docActualFd.keys_sorted():
+                    
+                    if (pal in unorder_dict_index) and tamDoc > 0:
+                        freq = docActualFd[pal] #/ float(tamDoc)
+                    else:
+                        freq = 0.0
+                    
+                    if dense_flag:
+                        bow += [(unorder_dict_index[pal], freq)]
+                        #matrix_docs_terms[i, unorder_dict_index[pal]] = freq
+                    
+                    if freq > 0.0:
+                        rows_file.write(str(i) + "\n")
+                        columns_file.write(str(unorder_dict_index[pal]) + "\n")
+                        vals_file.write(str(freq) + "\n")
+                    
+                ################################################################
+
+                ################################################################
+                # VERY SLOW
+#                j = 0
+#                for pal in space._vocabulary:
+#                        
+#                    if (pal in docActualFd) and tamDoc > 0:
+#                        #print str(freq) + " antes"
+#                        freq = docActualFd[pal] / float(tamDoc) #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
+##                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
+##                        freq = math.log((1 + docActual.diccionario[pal] / (float(docActual.tamDoc))), 2)
+#                        #print str(freq) + " despues"
+#                        # uncomment the following line if you want a boolean weigh :)
+#                        # freq=1.0
+#                        #if pal == "xico":
+#                        #    print pal +"where found in: "  +arch
+#                    else:
+#                        freq = 0
+##                    terminos[j] += freq
+#                    matrix_docs_terms[i,j] = freq
+#
+#                    j += 1
+                    ############################################################
+
+                i+=1
+                
+                instance_categories += [autor]
+                instance_namefiles += [arch]
+                
+            corpus_bow += [bow]
+            
+        Util.create_a_dir(space.space_path + "/lsa")
+            
+        corpora.MmCorpus.serialize(space.space_path + "/sparse/" + space.id_space + "_" + "corpus.mm", corpus_bow)
+        self.corpus_bow = corpora.MmCorpus(space.space_path + "/sparse/" + space.id_space + "_" + "corpus.mm") # load a corpus of nine documents, from the Tutorials
+        self.id2word = id2word
+        
+        #self.tfidf = models.TfidfModel(corpus) # step 1 -- initialize a model
+        
+        #corpus_tfidf = tfidf[corpus]
+        
+        #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
+        #corpus_lsi = lsi[corpus_tfidf]
+
+        self._matrix = matrix_docs_terms
+        self._instance_categories = instance_categories
+        self._instance_namefiles = instance_namefiles
+        
+        rows_file.close()
+        columns_file.close()
+        vals_file.close()
+
+        #print matConceptosTerm
+
+        t2 = time.time()
+        print "End of BOW representation. Time: ", str(t2-t1)
+            
+    def build_weight(self,
+                     space,
+                     virtual_classes_holder,
+                     corpus_file_list):
+
+        weighted_matrix_docs_terms = None
+
+        #some code
+
+        return weighted_matrix_docs_terms
+
+    def build_lsi(self):
+        final_matrix_lsi = None
+
+        # some code
+
+        self._matrix = final_matrix_lsi
+
+class LSATrainMatrixHolder(LSAMatrixHolder):
+
+    def __init__(self, space, tfidf=None, id2word=None):
+        super(LSATrainMatrixHolder, self).__init__(space, tfidf=None, id2word=None)
+        self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_train, self.space.corpus_file_list_train)
+        
+    def build_matrix(self):
+        
+        if ('concepts' in self.space.kwargs_space):        
+            dimensions = self.space.kwargs_space['concepts']
+        else:
+            dimensions = 300
+         
+        self.tfidf = models.TfidfModel(self.bow_corpus) # step 1 -- initialize a model
+        self.corpus_tfidf = self.tfidf[self.bow_corpus]
+        self.lsa = models.LsiModel(self.corpus_tfidf, id2word=self.id2word, num_topics=dimensions, chunksize=1, distributed=True) # run distributed LSA on documents
+        self.corpus_lsi = self.lsa[self.corpus_tfidf]   
+        
+        #From sparse to dense
+        matrix_documents_concepts = numpy.zeros((len(self.corpus_lsi), dimensions),
+                                        dtype=numpy.float64)       
+        cont_doc=0
+        for doc_lsi in self.corpus_lsi:            
+            for (index, contribution) in doc_lsi:                
+                matrix_documents_concepts[cont_doc, index] = contribution            
+            cont_doc += 1
+            
+        self._matrix = matrix_documents_concepts
+        #End of from sparse to dense                             
+
+    def normalize_matrix(self):
+        pass   
+        
+# 
+#     def build_matrix(self):
+#         matrix_docs_terms = self.build_matrix_doc_terminos(self.space,
+#                                        self.space.virtual_classes_holder_train,
+#                                        self.space.corpus_file_list_train)
+# 
+#         weighted_matrix_docs_terms = self.build_weight(self.space,
+#                                                        self.space.virtual_classes_holder_train,
+#                                                        self.space.corpus_file_list_train,
+#                                                        matrix_docs_terms)
+#         self.build_lsi(self.space,
+#                        self.space.virtual_classes_holder_train,
+#                        self.space.corpus_file_list_train,
+#                        weighted_matrix_docs_terms)
+
+    def get_matrix(self):
+        return self._matrix
+    
+    def get_instance_categories(self):
+        return self._instance_categories
+    
+    def get_instance_namefiles(self):
+        return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
+
+
+class LSATestMatrixHolder(BOWMatrixHolder):
+
+    def __init__(self, space, tfidf, id2word):
+        super(LSATestMatrixHolder, self).__init__(space, tfidf, id2word)
+        self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_test, self.space.corpus_file_list_test)
+        
+        
+    def build_matrix(self):
+        
+        if ('concepts' in self.space.kwargs_space):        
+            dimensions = self.space.kwargs_space['concepts']
+        else:
+            dimensions = 300
+        
+        self.corpus_tfidf = self.tfidf[self.bow_corpus]
+        self.corpus_lsi = self.lsa[self.corpus_tfidf]        
+        
+        #From sparse to dense
+        matrix_documents_concepts = numpy.zeros((len(self.corpus_lsi), dimensions),
+                                        dtype=numpy.float64)       
+        cont_doc=0
+        for doc_lsi in self.corpus_lsi:            
+            for (index, contribution) in doc_lsi:                
+                matrix_documents_concepts[cont_doc, index] = contribution            
+            cont_doc += 1
+            
+        self._matrix = matrix_documents_concepts
+        #End of from sparse to dense    
+
+    def normalize_matrix(self):
+        pass
+
+#     def build_matrix(self):
+#         matrix_docs_terms = self.build_matrix_doc_terminos(self.space,
+#                                        self.space.virtual_classes_holder_test,
+#                                        self.space.corpus_file_list_test)
+# 
+#         weighted_matrix_docs_terms = self.build_weight(self.space,
+#                                                        self.space.virtual_classes_holder_test,
+#                                                        self.space.corpus_file_list_test,
+#                                                        matrix_docs_terms)
+#         self.build_lsi(self.space,
+#                        self.space.virtual_classes_holder_test,
+#                        self.space.corpus_file_list_test,
+#                        weighted_matrix_docs_terms)
+
+    def get_matrix(self):
+        return self._matrix
+    
+    def get_instance_categories(self):
+        return self._instance_categories
+    
+    def get_instance_namefiles(self):
+        return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
+        
+        
+# ----------------------------------------
+
+class ExampleMatrixHolder(MatrixHolder):
 
     def __init__(self, space):
-        super(LSIMatrixHolder, self).__init__()
+        super(LSAMatrixHolder, self).__init__()
         self.space = space
         self.build_matrix()
 
@@ -2470,10 +2819,10 @@ class LSIMatrixHolder(MatrixHolder):
 
         self._matrix = final_matrix_lsi
 
-class LSITrainMatrixHolder(LSIMatrixHolder):
+class ExampleTrainMatrixHolder(LSAMatrixHolder):
 
     def __init__(self, space):
-        super(LSITrainMatrixHolder, self).__init__(space)
+        super(LSATrainMatrixHolder, self).__init__(space)
 
     def normalize_matrix(self):
         pass
@@ -2511,10 +2860,10 @@ class LSITrainMatrixHolder(LSIMatrixHolder):
         self._instance_namefiles = value
 
 
-class LSITestMatrixHolder(BOWMatrixHolder):
+class ExampleTestMatrixHolder(BOWMatrixHolder):
 
     def __init__(self, space):
-        super(LSITestMatrixHolder, self).__init__(space)
+        super(LSATestMatrixHolder, self).__init__(space)
 
     def normalize_matrix(self):
         pass
@@ -2550,6 +2899,8 @@ class LSITestMatrixHolder(BOWMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+# ----------------------------------------        
 
 
 class Report(object):
