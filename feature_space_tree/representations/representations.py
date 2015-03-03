@@ -1552,8 +1552,8 @@ class AttributeHeader(object):
 
 class AttributeHeaderBOW(AttributeHeader):
 
-    def __init_(self, fdist, vocabulary, categories):
-        super(AttributeHeaderBOW, self).__init__(fdist, vocabulary, categories)
+    def __init_(self, fdist, vocabulary, concepts):
+        super(AttributeHeaderBOW, self).__init__(fdist, vocabulary, concepts)
 
     def get_attributes(self):
         return self._vocabulary
@@ -1561,8 +1561,8 @@ class AttributeHeaderBOW(AttributeHeader):
 
 class AttributeHeaderCSA(AttributeHeader):
 
-    def __init_(self, fdist, vocabulary, categories):
-        super(AttributeHeaderCSA, self).__init__(fdist, vocabulary, categories)
+    def __init_(self, fdist, vocabulary, concepts):
+        super(AttributeHeaderCSA, self).__init__(fdist, vocabulary, concepts)
 
     def get_attributes(self):
         return self._concepts
@@ -1573,8 +1573,12 @@ class AttributeHeaderLSA(AttributeHeader):
     def __init_(self, fdist, vocabulary, concepts):
         super(AttributeHeaderLSA, self).__init__(fdist, vocabulary, concepts)
 
-    def get_attributes(self):        
-        return self._concepts
+    def get_attributes(self):
+        self.__str_concepts = []        
+        for e in range(self._concepts):
+            self.__str_concepts += ["c_" + str(e)]
+            
+        return self.__str_concepts
 
 
 class FactoryRepresentation(object):
@@ -1607,8 +1611,8 @@ class AbstractFactoryRepresentation(object):
 
     __metaclass__ = ABCMeta
 
-    def build_attribute_header(self, fdist, vocabulary, concepts):
-        return self.create_attribute_header(fdist, vocabulary, concepts)
+    def build_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        return self.create_attribute_header(fdist, vocabulary, concepts, space) 
 
     def build_matrix_train_holder(self, space):
         return self.create_matrix_train_holder(space)
@@ -1617,7 +1621,7 @@ class AbstractFactoryRepresentation(object):
         return self.create_matrix_test_holder(space)
 
     @abstractmethod
-    def create_attribute_header(self, fdist, vocabulary, concepts):
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
         pass
 
     @abstractmethod
@@ -1638,8 +1642,8 @@ class AbstractFactoryRepresentation(object):
 
 class FactoryBOWRepresentation(AbstractFactoryRepresentation):
 
-    def create_attribute_header(self, fdist, vocabulary, categories):
-        return AttributeHeaderBOW(fdist, vocabulary, categories)
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        return AttributeHeaderBOW(fdist, vocabulary, concepts)
 
     def create_matrix_train_holder(self, space):        
         self.__bow_train_matrix_holder = BOWTrainMatrixHolder(space) 
@@ -1678,8 +1682,8 @@ class FactoryBOWRepresentation(AbstractFactoryRepresentation):
 
 class FactoryCSARepresentation(AbstractFactoryRepresentation):
 
-    def create_attribute_header(self, fdist, vocabulary, categories):
-        return AttributeHeaderCSA(fdist, vocabulary, categories)
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        return AttributeHeaderCSA(fdist, vocabulary, concepts)
 
     def create_matrix_train_holder(self, space):
         self.__csa_train_matrix_holder = CSATrainMatrixHolder(space)
@@ -1724,15 +1728,17 @@ class FactoryCSARepresentation(AbstractFactoryRepresentation):
     
 class FactoryLSARepresentation(AbstractFactoryRepresentation):
 
-    def create_attribute_header(self, fdist, vocabulary, concepts):
-        return AttributeHeaderLSA(fdist, vocabulary, concepts)
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        return AttributeHeaderLSA(fdist, vocabulary, space.kwargs_space['concepts'])
 
     def create_matrix_train_holder(self, space):        
-        self.__lsa_train_matrix_holder = LSATrainMatrixHolder(space) 
+        self.__lsa_train_matrix_holder = LSATrainMatrixHolder(space, dataset_label="train") 
+        self.__lsa_train_matrix_holder.build_matrix()
         return self.__lsa_train_matrix_holder 
 
     def create_matrix_test_holder(self,space):
-        self.__lsa_test_matrix_holder = LSATestMatrixHolder(space) 
+        self.__lsa_test_matrix_holder = LSATestMatrixHolder(space, self.__lsa_train_matrix_holder.get_id2word(), self.__lsa_train_matrix_holder.get_tfidf(), self.__lsa_train_matrix_holder.get_lsa(), "test")
+        self.__lsa_test_matrix_holder.build_matrix() 
         return self.__lsa_test_matrix_holder
     
     def save_train_data(self, space):
@@ -1740,8 +1746,19 @@ class FactoryLSARepresentation(AbstractFactoryRepresentation):
         if self.__lsa_train_matrix_holder is not None:
             cache_file = "%s/%s" % (space.space_path, space.id_space)
             
-            numpy.save(cache_file + "_mat_terms_concepts.npy", 
-                       self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
+            #numpy.save(cache_file + "_mat_terms_concepts.npy", 
+            #           self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
+            
+            id2word = self.__lsa_train_matrix_holder.get_id2word()            
+            with open(space.space_path + "/lsa/" + space.id_space + "_id2word.txt", 'w') as outfile:
+                json.dump(id2word, outfile)  
+                          
+            tfidf = self.__lsa_train_matrix_holder.get_tfidf()
+            tfidf.save(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")
+            
+            lsa = self.__lsa_train_matrix_holder.get_lsa()
+            lsa.save(space.space_path + "/lsa/" + space.id_space + "_model.lsi") # same for tfidf, lda, ...
+            
             
             numpy.save(cache_file + "_mat_docs_concepts.npy", 
                        self.__lsa_train_matrix_holder.get_matrix())
@@ -1757,8 +1774,18 @@ class FactoryLSARepresentation(AbstractFactoryRepresentation):
     def load_train_data(self, space):
         cache_file = "%s/%s" % (space.space_path, space.id_space)
         
-        self.__lsa_train_matrix_holder = LSATrainMatrixHolder(space)        
-        self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        self.__lsa_train_matrix_holder = LSATrainMatrixHolder(space)
+        
+        with open(space.space_path + "/lsa/" + space.id_space + "_id2word.txt", 'r') as infile:
+                id2word = json.load(infile)       
+        tfidf = models.TfidfModel.load(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")      
+        lsa = models.LsiModel.load(space.space_path + "/lsa/" + space.id_space + "_model.lsi")    
+        
+        self.__lsa_train_matrix_holder.set_id2word(id2word)
+        self.__lsa_train_matrix_holder.set_tfidf(tfidf)
+        self.__lsa_train_matrix_holder.set_lsa(lsa)
+          
+        #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
         self.__lsa_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
         self.__lsa_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
         self.__lsa_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
@@ -2464,15 +2491,35 @@ class BOWTestMatrixHolder(BOWMatrixHolder):
 
 class LSAMatrixHolder(MatrixHolder):
 
-    def __init__(self, space, tfidf=None, lsa=None):
+    def __init__(self, space, id2word=None, tfidf=None, lsa=None, dataset_label="???"):
         super(LSAMatrixHolder, self).__init__()
         self.space = space
         self.bow_corpus = None
-        self.id2word = None
+        self.id2word = id2word
         self.tfidf = tfidf
         self.lsa = lsa
         self.corpus_tfidf = None
-        self.corpus_lsa = None        
+        self.corpus_lsa = None    
+        self._id_dataset = dataset_label
+        
+    def get_tfidf(self):
+        return self.tfidf
+    
+    def get_id2word(self):
+        return self.id2word    
+    
+    def get_lsa(self):
+        return self.lsa
+    
+    def set_tfidf(self, tfidf):
+        self.tfidf = tfidf
+    
+    def set_id2word(self, id2word):
+        self.id2word = id2word    
+    
+    def set_lsa(self, lsa):
+        self.lsa = lsa
+    
         
     def build_bowcorpus_id2word(self,
                           space,
@@ -2570,12 +2617,17 @@ class LSAMatrixHolder(MatrixHolder):
                 instance_categories += [autor]
                 instance_namefiles += [arch]
                 
-            corpus_bow += [bow]
+                corpus_bow += [bow]
             
         Util.create_a_dir(space.space_path + "/lsa")
+        
+        print corpus_bow
             
-        corpora.MmCorpus.serialize(space.space_path + "/sparse/" + space.id_space + "_" + "corpus.mm", corpus_bow)
-        self.corpus_bow = corpora.MmCorpus(space.space_path + "/sparse/" + space.id_space + "_" + "corpus.mm") # load a corpus of nine documents, from the Tutorials
+        corpora.MmCorpus.serialize(space.space_path + "/lsa/" + space.id_space + "_" + self._id_dataset + "_corpus.mm", corpus_bow)
+        self.corpus_bow = corpora.MmCorpus(space.space_path + "/lsa/" + space.id_space + "_" + self._id_dataset + "_corpus.mm") # load a corpus of nine documents, from the Tutorials
+        
+        print self.corpus_bow
+        
         self.id2word = id2word
         
         #self.tfidf = models.TfidfModel(corpus) # step 1 -- initialize a model
@@ -2618,9 +2670,10 @@ class LSAMatrixHolder(MatrixHolder):
 
 class LSATrainMatrixHolder(LSAMatrixHolder):
 
-    def __init__(self, space, tfidf=None, id2word=None):
-        super(LSATrainMatrixHolder, self).__init__(space, tfidf=None, id2word=None)
+    def __init__(self, space, id2word=None, tfidf=None, lsa=None, dataset_label="train"):
+        super(LSATrainMatrixHolder, self).__init__(space, id2word, tfidf, lsa, dataset_label)
         self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_train, self.space.corpus_file_list_train)
+        #self._id_dataset="train"
         
     def build_matrix(self):
         
@@ -2628,18 +2681,20 @@ class LSATrainMatrixHolder(LSAMatrixHolder):
             dimensions = self.space.kwargs_space['concepts']
         else:
             dimensions = 300
+            
+        print self.corpus_bow
          
-        self.tfidf = models.TfidfModel(self.bow_corpus) # step 1 -- initialize a model
-        self.corpus_tfidf = self.tfidf[self.bow_corpus]
-        self.lsa = models.LsiModel(self.corpus_tfidf, id2word=self.id2word, num_topics=dimensions, chunksize=1, distributed=True) # run distributed LSA on documents
-        self.corpus_lsi = self.lsa[self.corpus_tfidf]   
+        self.tfidf = models.TfidfModel(self.corpus_bow) # step 1 -- initialize a model
+        self.corpus_tfidf = self.tfidf[self.corpus_bow]
+        self.lsa = models.LsiModel(self.corpus_tfidf, id2word=self.id2word, num_topics=dimensions) # run distributed LSA on documents
+        self.corpus_lsa = self.lsa[self.corpus_tfidf]   
         
         #From sparse to dense
-        matrix_documents_concepts = numpy.zeros((len(self.corpus_lsi), dimensions),
+        matrix_documents_concepts = numpy.zeros((len(self.corpus_lsa), dimensions),
                                         dtype=numpy.float64)       
         cont_doc=0
-        for doc_lsi in self.corpus_lsi:            
-            for (index, contribution) in doc_lsi:                
+        for doc_lsa in self.corpus_lsa:            
+            for (index, contribution) in doc_lsa:                
                 matrix_documents_concepts[cont_doc, index] = contribution            
             cont_doc += 1
             
@@ -2683,11 +2738,12 @@ class LSATrainMatrixHolder(LSAMatrixHolder):
         self._instance_namefiles = value
 
 
-class LSATestMatrixHolder(BOWMatrixHolder):
+class LSATestMatrixHolder(LSAMatrixHolder):
 
-    def __init__(self, space, tfidf, id2word):
-        super(LSATestMatrixHolder, self).__init__(space, tfidf, id2word)
+    def __init__(self, space, id2word, tfidf, lsa, dataset_label="test"):
+        super(LSATestMatrixHolder, self).__init__(space, id2word, tfidf, lsa, dataset_label)
         self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_test, self.space.corpus_file_list_test)
+        #self._id_dataset="test"
         
         
     def build_matrix(self):
@@ -2697,7 +2753,7 @@ class LSATestMatrixHolder(BOWMatrixHolder):
         else:
             dimensions = 300
         
-        self.corpus_tfidf = self.tfidf[self.bow_corpus]
+        self.corpus_tfidf = self.tfidf[self.corpus_bow]
         self.corpus_lsi = self.lsa[self.corpus_tfidf]        
         
         #From sparse to dense
@@ -4080,7 +4136,8 @@ class SpaceItem(SpaceComponent):
         self.attribute_header = \
         self.representation.build_attribute_header(self._fdist,
                                                    self._vocabulary,
-                                                   self.categories)
+                                                   self.categories,
+                                                   self)
 
 ####        print "DATA ######"
         print self.kwargs_space['representation']
@@ -4108,7 +4165,8 @@ class SpaceItem(SpaceComponent):
         self.attribute_header = \
         self.representation.build_attribute_header(self._fdist,
                                                    self._vocabulary,
-                                                   self.categories)
+                                                   self.categories,
+                                                   self)
 
 ####        print "DATA ######"
         print self.kwargs_space['representation']
@@ -4135,7 +4193,8 @@ class SpaceItem(SpaceComponent):
         self.attribute_header = \
         self.representation.build_attribute_header(self._fdist,
                                                    self._vocabulary,
-                                                   self.categories)
+                                                   self.categories,
+                                                   self)
 
 ####        print "DATA ######"
         print self.kwargs_space['representation']
