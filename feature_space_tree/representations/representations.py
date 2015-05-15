@@ -47,6 +47,8 @@ import yaml
 import json
 
 from gensim import corpora, models, similarities
+from sklearn.cluster import KMeans
+from sklearn.externals import joblib
 
 from abc import ABCMeta, abstractmethod
 
@@ -61,6 +63,7 @@ from _pyio import __metaclass__
 from aptsources.distinfo import Template
 from boto.ec2.cloudwatch.dimension import Dimension
 from gensim.models.word2vec import Word2Vec
+from gensim.matutils import Dense2Corpus
 from numpy import transpose
 from ..attributes.virtuals \
 import FilterTermsVirtualGlobalProcessor, FilterTermsVirtualReProcessor
@@ -270,6 +273,39 @@ class Util(object):
 #                                         [],
 #                                         corpus)
         return corpus
+    
+    @staticmethod
+    def decorate_matrix_holder(matrix_holder, space, kwargs_decorators_matrix_holder, dataset="???"):
+
+        factory_simple_decorator_matrix_holder = FactorySimpleDecoratorMatrixHolder()
+        for kwargs_decorator_matrix_holder in kwargs_decorators_matrix_holder:
+            print kwargs_decorator_matrix_holder
+            decorator_matrix_holder = \
+            factory_simple_decorator_matrix_holder.build(kwargs_decorator_matrix_holder["type_decorator_matrix"],
+                                                   kwargs_decorator_matrix_holder,
+                                                   matrix_holder)  # all this arguments kwargs and matrix_holder necessaries???
+            if dataset == "train":
+                matrix_holder = decorator_matrix_holder.create_matrix_train_holder(matrix_holder, space)
+            elif dataset == "test":
+                matrix_holder = decorator_matrix_holder.create_matrix_test_holder(matrix_holder, space)
+            else:
+                print "ERROR: You need to specify the dataset" 
+                raise UnsupportedOperationError("ERROR: You need to specify the dataset")
+            
+        return matrix_holder
+    
+    @staticmethod
+    def decorate_attribute_header(attribute_header, space, kwargs_decorators_attribute_header, dataset="???"):
+        
+        factory_simple_decorator_attribute_header = FactorySimpleDecoratorAttributeHeader()
+        for kwargs_decorator_attribute_header in kwargs_decorators_attribute_header:
+            print kwargs_decorator_attribute_header
+            attribute_header = \
+            factory_simple_decorator_attribute_header.build(kwargs_decorator_attribute_header["type_decorator_matrix"],
+                                                   kwargs_decorator_attribute_header,
+                                                   attribute_header)  # all this arguments kwargs and matrix_holder necessaries???
+            
+        return attribute_header
 
 
     @staticmethod
@@ -1611,6 +1647,50 @@ class AttributeHeaderLDA(AttributeHeader):
         return self.__str_concepts
 
 
+class FactoryDecoratorAttributeHeader(object):
+
+    __metaclass__ = ABCMeta
+
+    def build(self,option, kwargs, attribute_header): # all this arguments kwargs and matrix_holder necessaries???
+        option = eval(option)
+        return self.create(option, kwargs, attribute_header)
+
+    @abstractmethod
+    def create(self, option, kwargs, attribute_header): # all this arguments kwargs and matrix_holder necessaries???
+        pass
+
+
+class FactorySimpleDecoratorAttributeHeader(FactoryDecoratorAttributeHeader):
+
+    def create(self, option, kwargs, attribute_header): # all this arguments kwargs and matrix_holder necessaries???
+        if option == EnumDecoratorsMatrixHolder.FIXED_QUANTIZED:
+            return FixedQuantizedAttributeHeader(attribute_header, kwargs["k_centers"]);
+    
+    
+class DecoratorAttributeHeader(object):
+    
+    def __init__(self, attribute_header):
+        self.__attribute_header = attribute_header
+
+    def get_attributes(self):
+        self.__attribute_header.get_attributes()
+        
+
+class FixedQuantizedAttributeHeader(DecoratorAttributeHeader):
+    
+    def __init__(self, attribute_header, k):
+        super(FixedQuantizedAttributeHeader, self).__init__(attribute_header)
+        self.__k = k
+
+    def get_attributes(self):
+        old_attributes = super(FixedQuantizedAttributeHeader, self).get_attributes()
+        
+        self.__str_concepts = []        
+        for e in range(self.__k):
+            self.__str_concepts += ["prototype_" + str(e)]
+            
+        return self.__str_concepts
+        
 class FactoryRepresentation(object):
 
     __metaclass__ = ABCMeta
@@ -1675,8 +1755,76 @@ class AbstractFactoryRepresentation(object):
     @abstractmethod
     def load_train_data(self, space):
         pass
+    
 
 class FactoryBOWRepresentation(AbstractFactoryRepresentation):
+
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        self.__bow_attribute_header = AttributeHeaderBOW(fdist, vocabulary, concepts)
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__bow_attribute_header = Util.decorate_attribute_header(self.__bow_attribute_header,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'])
+        # Decorating --------------------------------------------------      
+           
+        return self.__bow_attribute_header
+
+    def create_matrix_train_holder(self, space):        
+        self.__bow_train_matrix_holder = BOWTrainMatrixHolder(space) 
+        
+        # Decorating --------------------------------------------------
+        # print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__bow_train_matrix_holder = Util.decorate_matrix_holder(self.__bow_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__bow_train_matrix_holder.build_matrix()
+        return self.__bow_train_matrix_holder 
+
+    def create_matrix_test_holder(self,space):
+        self.__bow_test_matrix_holder = BOWTestMatrixHolder(space) 
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__bow_test_matrix_holder = Util.decorate_matrix_holder(self.__bow_test_matrix_holder,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'],
+                                                                        "test")
+        # Decorating --------------------------------------------------
+        
+        self.__bow_test_matrix_holder.build_matrix()
+        return self.__bow_test_matrix_holder
+    
+    def save_train_data(self, space):
+        
+        if self.__bow_train_matrix_holder is not None:
+            self.__bow_train_matrix_holder.save_train_data(space)
+        else:
+            print "ERROR CSA: There is not a train matrix terms concepts built"
+            
+    def load_train_data(self, space):
+        
+        self.__bow_train_matrix_holder = BOWTrainMatrixHolder(space)
+        
+        # Decorating --------------------------------------------------
+        print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__bow_train_matrix_holder = Util.decorate_matrix_holder(self.__bow_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__bow_train_matrix_holder =  self.__bow_train_matrix_holder.load_train_data(space)
+        return self.__bow_train_matrix_holder
+    
+
+class FactoryBOWRepresentation_bak(AbstractFactoryRepresentation):
 
     def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
         return AttributeHeaderBOW(fdist, vocabulary, concepts)
@@ -1718,6 +1866,81 @@ class FactoryBOWRepresentation(AbstractFactoryRepresentation):
 
 class FactoryCSARepresentation(AbstractFactoryRepresentation):
 
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):    
+        self.__csa_attribute_header = AttributeHeaderCSA(fdist, vocabulary, concepts)
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__csa_attribute_header = Util.decorate_attribute_header(self.__csa_attribute_header,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'])
+        # Decorating --------------------------------------------------      
+           
+        return self.__csa_attribute_header
+
+    def create_matrix_train_holder(self, space):
+        self.__csa_train_matrix_holder = CSATrainMatrixHolder(space)
+        
+        # Decorating --------------------------------------------------
+        # print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__csa_train_matrix_holder = Util.decorate_matrix_holder(self.__csa_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__csa_train_matrix_holder.build_matrix()
+        return self.__csa_train_matrix_holder
+
+    def create_matrix_test_holder(self, space):
+        self.__csa_test_matrix_holder = CSATestMatrixHolder(space, 
+                                                            train_matrix_holder=self.__csa_train_matrix_holder)
+                                                            #numpy.transpose(self.__csa_train_matrix_holder.get_matrix_terms()))
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__csa_test_matrix_holder = Util.decorate_matrix_holder(self.__csa_test_matrix_holder,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'],
+                                                                        "test")
+        # Decorating --------------------------------------------------
+        
+        # Post initialization of what exactly the TEST object will need!.
+        # The exact shared resource that the test_matrix_holder needs is CONTAINED in the 
+        # last DECORATED version of the train_matrix_holder.
+        # self.__csa_test_matrix_holder.set_shared_resource(self.__csa_train_matrix_holder.get_shared_resource())
+        # -------------------------------------------------------------
+        
+        self.__csa_test_matrix_holder.build_matrix()
+        return self.__csa_test_matrix_holder
+    
+    def save_train_data(self, space):
+        
+        if self.__csa_train_matrix_holder is not None:
+            self.__csa_train_matrix_holder.save_train_data(space)
+        else:
+            print "ERROR CSA: There is not a train matrix terms concepts built"
+            
+    def load_train_data(self, space):
+        
+        self.__csa_train_matrix_holder = CSATrainMatrixHolder(space)
+        
+        # Decorating --------------------------------------------------
+        print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__csa_train_matrix_holder = Util.decorate_matrix_holder(self.__csa_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__csa_train_matrix_holder =  self.__csa_train_matrix_holder.load_train_data(space)
+        return self.__csa_train_matrix_holder
+    
+    
+class FactoryCSARepresentation_bak(AbstractFactoryRepresentation):
+
     def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
         return AttributeHeaderCSA(fdist, vocabulary, concepts)
 
@@ -1728,6 +1951,7 @@ class FactoryCSARepresentation(AbstractFactoryRepresentation):
 
     def create_matrix_test_holder(self, space):
         self.__csa_test_matrix_holder = CSATestMatrixHolder(space, self.__csa_train_matrix_holder.get_matrix_terms_concepts())
+        self.__csa_test_matrix_holder.build_matrix()
         return self.__csa_test_matrix_holder
     
     def save_train_data(self, space):
@@ -1763,6 +1987,76 @@ class FactoryCSARepresentation(AbstractFactoryRepresentation):
     
     
 class FactoryLSARepresentation(AbstractFactoryRepresentation):
+
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        self.__lsa_attribute_header = AttributeHeaderLSA(fdist, vocabulary, space.kwargs_space['concepts'])
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__lsa_attribute_header = Util.decorate_attribute_header(self.__lsa_attribute_header,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'])
+        # Decorating --------------------------------------------------      
+           
+        return self.__lsa_attribute_header
+
+    def create_matrix_train_holder(self, space):        
+        self.__lsa_train_matrix_holder = LSATrainMatrixHolder(space, dataset_label="train") 
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__lsa_train_matrix_holder = Util.decorate_matrix_holder(self.__lsa_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__lsa_train_matrix_holder.build_matrix()
+        return self.__lsa_train_matrix_holder 
+
+    def create_matrix_test_holder(self,space):
+        # self.__lsa_test_matrix_holder = LSATestMatrixHolder(space, self.__lsa_train_matrix_holder.get_id2word(), self.__lsa_train_matrix_holder.get_tfidf(), self.__lsa_train_matrix_holder.get_lsa(), "test")
+        
+        self.__lsa_test_matrix_holder = LSATestMatrixHolder(space,
+                                                            dataset_label="test")
+
+                                                            #train_matrix_holder=self.__lsa_train_matrix_holder, 
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__lsa_test_matrix_holder = Util.decorate_matrix_holder(self.__lsa_test_matrix_holder,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'],
+                                                                        "test")
+        # Decorating --------------------------------------------------
+        
+        self.__lsa_test_matrix_holder.build_matrix() 
+        return self.__lsa_test_matrix_holder    
+    
+    def save_train_data(self, space):
+        if self.__lsa_train_matrix_holder is not None:
+            self.__lsa_train_matrix_holder.save_train_data(space)
+        else:
+            print "ERROR CSA: There is not a train matrix terms concepts built"
+            
+    def load_train_data(self, space):
+        
+        self.__lsa_train_matrix_holder = LSATrainMatrixHolder(space, dataset_label="train")
+        
+        # Decorating --------------------------------------------------
+        print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__lsa_train_matrix_holder = Util.decorate_matrix_holder(self.__lsa_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__lsa_train_matrix_holder =  self.__lsa_train_matrix_holder.load_train_data(space)        
+        return self.__lsa_train_matrix_holder 
+    
+
+class FactoryLSARepresentation_bak(AbstractFactoryRepresentation):
 
     def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
         return AttributeHeaderLSA(fdist, vocabulary, space.kwargs_space['concepts'])
@@ -1827,82 +2121,225 @@ class FactoryLSARepresentation(AbstractFactoryRepresentation):
         self.__lsa_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
         
         return self.__lsa_train_matrix_holder   
-    
+        
     
 class FactoryDORRepresentation(AbstractFactoryRepresentation):
 
-    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):        
-        return AttributeHeaderDOR(fdist, vocabulary, space.corpus_file_list_train)
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):   
+        
+        self.__dor_attribute_header = AttributeHeaderDOR(fdist, vocabulary, space.corpus_file_list_train)
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__dor_attribute_header = Util.decorate_attribute_header(self.__dor_attribute_header,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'])
+        # Decorating --------------------------------------------------      
+           
+        return self.__dor_attribute_header
 
-    def create_matrix_train_holder(self, space):        
-        self.__dor_train_matrix_holder = DORTrainMatrixHolder(space, dataset_label="train") 
-        self.__dor_train_matrix_holder.build_bowcorpus_id2word(space, space.virtual_classes_holder_train, space.corpus_file_list_train)
+    def create_matrix_train_holder(self, space):  
+        
+        # Basic initialization ----------------------------------------      
+        self.__dor_train_matrix_holder = DORTrainMatrixHolder(space, 
+                                                              dataset_label="train")
+        self.__dor_train_matrix_holder.build_bowcorpus_id2word(space, 
+                                                               space.virtual_classes_holder_train, 
+                                                               space.corpus_file_list_train)
+        # Basic initialization ----------------------------------------
+        
+        # Decorating --------------------------------------------------
+        print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__dor_train_matrix_holder = Util.decorate_matrix_holder(self.__dor_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        # Post initialization of what exactly the TEST object will need!.
+        # The exact shared resource that the test_matrix_holder needs is CONTAINED in the 
+        # last DECORATED version of the train_matrix_holder.
         self.__dor_train_matrix_holder.build_matrix()
+        # -------------------------------------------------------------        
         return self.__dor_train_matrix_holder 
 
     def create_matrix_test_holder(self,space):
-        self.__dor_test_matrix_holder = DORTestMatrixHolder(space, self.__dor_train_matrix_holder.get_id2word(), self.__dor_train_matrix_holder.get_tfidf(), self.__dor_train_matrix_holder.get_lsa(), "test")
-        self.__dor_test_matrix_holder.set_mat_docs_terms(self.__dor_train_matrix_holder.get_mat_docs_terms())
+        #self.__dor_test_matrix_holder = DORTestMatrixHolder(space, self.__dor_train_matrix_holder.get_id2word(), self.__dor_train_matrix_holder.get_tfidf(), self.__dor_train_matrix_holder.get_lsa(), "test")
+        #self.__dor_test_matrix_holder.set_mat_docs_terms(self.__dor_train_matrix_holder.get_mat_docs_terms())
+        
+        # These are the base initialization. Methods like set_matrix_terms, never should be overwriten by decorators
+        
+        # Basic initialization ----------------------------------------
+        self.__dor_test_matrix_holder = DORTestMatrixHolder(space, 
+                                                            train_matrix_holder=self.__dor_train_matrix_holder,
+                                                            dataset_label="test")
+        #self.__dor_test_matrix_holder.set_matrix_terms(self.__dor_train_matrix_holder.get_matrix_terms())
+        # Basic initialization ----------------------------------------
+                
+        #self.__dor_test_matrix_holder.set_shared_resource(self.__dor_train_matrix_holder.get_shared_resource())
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__dor_test_matrix_holder = Util.decorate_matrix_holder(self.__dor_test_matrix_holder,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'],
+                                                                        "test")
+        # Decorating --------------------------------------------------
+        
+        # Post initialization of what exactly the TEST object will need!.
+        # The exact shared resource that the test_matrix_holder needs is CONTAINED in the 
+        # last DECORATED version of the train_matrix_holder.
+        # self.__dor_test_matrix_holder.set_shared_resource(self.__dor_train_matrix_holder.get_shared_resource())
         self.__dor_test_matrix_holder.build_matrix() 
+        # -------------------------------------------------------------
         return self.__dor_test_matrix_holder
     
     def save_train_data(self, space):
         
         if self.__dor_train_matrix_holder is not None:
-            cache_file = "%s/%s" % (space.space_path, space.id_space)
-            
-            #numpy.save(cache_file + "_mat_terms_concepts.npy", 
-            #           self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
-            
-            id2word = self.__dor_train_matrix_holder.get_id2word()            
-            with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'w') as outfile:
-                json.dump(id2word, outfile)  
-                          
-            #tfidf = self.__dor_train_matrix_holder.get_tfidf()
-            #tfidf.save(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")
-            
-            #dor = self.__dor_train_matrix_holder.get_dor()
-            #dor.save(space.space_path + "/dor/" + space.id_space + "_model.dor") # same for tfidf, lda, ...
-            
-            
-            numpy.save(cache_file + "_mat_docs_docs.npy", 
-                       self.__dor_train_matrix_holder.get_matrix())
-            
-            numpy.save(cache_file + "_mat_docs_terms.npy", 
-                       self.__dor_train_matrix_holder.get_mat_docs_terms())
-            
-            numpy.save(cache_file + "_instance_namefiles.npy", 
-                       self.__dor_train_matrix_holder.get_instance_namefiles())
-            
-            numpy.save(cache_file + "_instance_categories.npy", 
-                       self.__dor_train_matrix_holder.get_instance_categories())
+            self.__dor_train_matrix_holder.save_train_data(space)
         else:
-            print "ERROR LSA: There is not a train matrix terms concepts built"
+            print "ERROR DOR: There is not a train matrix terms concepts built"
+        
+#         
+#         if self.__dor_train_matrix_holder is not None:
+#             cache_file = "%s/%s" % (space.space_path, space.id_space)
+#             
+#             #numpy.save(cache_file + "_mat_terms_concepts.npy", 
+#             #           self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
+#             
+#             id2word = self.__dor_train_matrix_holder.get_id2word()            
+#             with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'w') as outfile:
+#                 json.dump(id2word, outfile)  
+#                           
+#             #tfidf = self.__dor_train_matrix_holder.get_tfidf()
+#             #tfidf.save(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")
+#             
+#             #dor = self.__dor_train_matrix_holder.get_dor()
+#             #dor.save(space.space_path + "/dor/" + space.id_space + "_model.dor") # same for tfidf, lda, ...
+#             
+#             
+#             numpy.save(cache_file + "_mat_docs_docs.npy", 
+#                        self.__dor_train_matrix_holder.get_matrix())
+#             
+#             numpy.save(cache_file + "_mat_docs_terms.npy", 
+#                        self.__dor_train_matrix_holder.get_mat_docs_terms())
+#             
+#             numpy.save(cache_file + "_instance_namefiles.npy", 
+#                        self.__dor_train_matrix_holder.get_instance_namefiles())
+#             
+#             numpy.save(cache_file + "_instance_categories.npy", 
+#                        self.__dor_train_matrix_holder.get_instance_categories())
+#         else:
+#             print "ERROR LSA: There is not a train matrix terms concepts built"
 
     def load_train_data(self, space):
-        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        self.__dor_train_matrix_holder = DORTrainMatrixHolder(space, dataset_label="train")
         
-        self.__dor_train_matrix_holder = DORTrainMatrixHolder(space)
+        # Decorating --------------------------------------------------
+        print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__dor_train_matrix_holder = Util.decorate_matrix_holder(self.__dor_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
         
-        with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'r') as infile:
-                id2word = json.load(infile)       
-        #tfidf = models.TfidfModel.load(space.space_path + "/dor/" + space.id_space + "_model.tfidf")      
-        #dor = models.LsiModel.load(space.space_path + "/dor/" + space.id_space + "_model.dor")    
+        self.__dor_train_matrix_holder =  self.__dor_train_matrix_holder.load_train_data(space)
+        return self.__dor_train_matrix_holder
         
-        self.__dor_train_matrix_holder.set_id2word(id2word)
-        #self.__dor_train_matrix_holder.set_tfidf(tfidf)
-        #self.__dor_train_matrix_holder.set_dor(dor)
-          
-        #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
-        self.__dor_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_docs.npy"))
-        self.__dor_train_matrix_holder.set_mat_docs_terms(numpy.load(cache_file + "_mat_docs_terms.npy"))
-        self.__dor_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
-        self.__dor_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
-        
-        return self.__dor_train_matrix_holder    
+#         cache_file = "%s/%s" % (space.space_path, space.id_space)
+#         
+#         self.__dor_train_matrix_holder = DORTrainMatrixHolder(space)
+#         
+#         with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'r') as infile:
+#                 id2word = json.load(infile)       
+#         #tfidf = models.TfidfModel.load(space.space_path + "/dor/" + space.id_space + "_model.tfidf")      
+#         #dor = models.LsiModel.load(space.space_path + "/dor/" + space.id_space + "_model.dor")    
+#         
+#         self.__dor_train_matrix_holder.set_id2word(id2word)
+#         #self.__dor_train_matrix_holder.set_tfidf(tfidf)
+#         #self.__dor_train_matrix_holder.set_dor(dor)
+#           
+#         #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+#         self.__dor_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_docs.npy"))
+#         self.__dor_train_matrix_holder.set_mat_docs_terms(numpy.load(cache_file + "_mat_docs_terms.npy"))
+#         self.__dor_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+#         self.__dor_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+#         
+#         return self.__dor_train_matrix_holder    
 
 
 class FactoryLDARepresentation(AbstractFactoryRepresentation):
+
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        lda_attribute_header = AttributeHeaderLDA(fdist, vocabulary, space.kwargs_space['concepts'])
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            lda_attribute_header = Util.decorate_attribute_header(lda_attribute_header,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'])
+        # Decorating --------------------------------------------------      
+           
+        return lda_attribute_header
+
+    def create_matrix_train_holder(self, space):        
+        self.__lda_train_matrix_holder = LDATrainMatrixHolder(space, dataset_label="train") 
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__lda_train_matrix_holder = Util.decorate_matrix_holder(self.__lda_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__lda_train_matrix_holder.build_matrix()
+        return self.__lda_train_matrix_holder 
+
+    def create_matrix_test_holder(self,space):
+        self.__lda_test_matrix_holder = LDATestMatrixHolder(space, self.__lda_train_matrix_holder.get_id2word(), 
+                                                            self.__lda_train_matrix_holder.get_tfidf(), 
+                                                            self.__lda_train_matrix_holder.get_lda(), 
+                                                            dataset_label="test")
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__lda_test_matrix_holder = Util.decorate_matrix_holder(self.__lda_test_matrix_holder,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'],
+                                                                        "test")
+        # Decorating --------------------------------------------------
+        
+        self.__lda_test_matrix_holder.build_matrix() 
+        return self.__lda_test_matrix_holder
+    
+    def save_train_data(self, space):
+        if self.__lda_train_matrix_holder is not None:
+            self.__lda_train_matrix_holder.save_train_data(space)
+        else:
+            print "ERROR LDA: There is not a train matrix terms concepts built"
+            
+    def load_train_data(self, space):
+        
+        self.__lda_train_matrix_holder = LDATrainMatrixHolder(space, dataset_label="train")
+        
+        # Decorating --------------------------------------------------
+        print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__lda_train_matrix_holder = Util.decorate_matrix_holder(self.__lda_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__lda_train_matrix_holder =  self.__lda_train_matrix_holder.load_train_data(space)        
+        return self.__lda_train_matrix_holder 
+
+
+class FactoryLDARepresentation_bak(AbstractFactoryRepresentation):
 
     def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
         return AttributeHeaderLDA(fdist, vocabulary, space.kwargs_space['concepts'])
@@ -2009,7 +2446,429 @@ class MatrixHolder(object):
     @abstractmethod
     def set_instance_namefiles(self, value):
         pass
+    
+    @abstractmethod
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    @abstractmethod
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    @abstractmethod
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    @abstractmethod
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    @abstractmethod
+    def save_train_data(self, space):
+        pass
+    
+    @abstractmethod
+    def load_train_data(self, space):
+        pass
+    
 
+class EnumDecoratorsMatrixHolder(object):
+
+    (TRANSPARENT,
+     FIXED_QUANTIZED,
+     CLASS_DESCOMPOSITION,
+     NORM_SUM_ONE,
+     NORM_Z_SCORE) = range(5)
+
+
+class FactoryDecoratorMatrixHolder(object):
+
+    __metaclass__ = ABCMeta
+
+    def build(self,option, kwargs, matrix_holder): # all this arguments kwargs and matrix_holder necessaries???
+        option = eval(option)
+        return self.create(option, kwargs, matrix_holder)
+
+    @abstractmethod
+    def create(self, option, kwargs, matrix_holder): # all this arguments kwargs and matrix_holder necessaries???
+        pass
+
+
+class FactorySimpleDecoratorMatrixHolder(FactoryDecoratorMatrixHolder):
+
+    def create(self, option, kwargs, matrix_holder): # all this arguments kwargs and matrix_holder necessaries???
+        if option == EnumDecoratorsMatrixHolder.FIXED_QUANTIZED:
+            return FactoryQuantizedDecoratorMatrixHolder(kwargs["k_centers"]);
+
+
+class AbstractFactoryDecoratorMatrixHolder(object):
+
+    __metaclass__ = ABCMeta
+
+    def build_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        return self.create_attribute_header(fdist, vocabulary, concepts, space) 
+
+    def build_matrix_train_holder(self, matrix_holder, space):
+        return self.create_matrix_train_holder(space)
+
+    def build_matrix_test_holder(self, matrix_holder, space):
+        return self.create_matrix_test_holder(space)
+
+    @abstractmethod
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        pass
+
+    @abstractmethod
+    def create_matrix_train_holder(self, space):
+        pass
+
+    @abstractmethod
+    def create_matrix_test_holder(self, space):
+        pass
+    
+    @abstractmethod
+    def save_train_data(self, space):
+        pass
+
+    @abstractmethod
+    def load_train_data(self, space):
+        pass
+
+class FactoryQuantizedDecoratorMatrixHolder(AbstractFactoryDecoratorMatrixHolder):
+    
+    def __init__(self, k_centers):
+        self.k_centers = k_centers
+
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        return AttributeHeaderBOW(fdist, vocabulary, concepts)
+
+    def create_matrix_train_holder(self, matrix_holder, space):        
+        return FixedQuantizedTrainMatrixHolder(matrix_holder, self.k_centers)
+
+    def create_matrix_test_holder(self, matrix_holder, space):
+        return FixedQuantizedTestMatrixHolder(matrix_holder, self.k_centers)
+    
+    def save_train_data(self, space):
+        pass
+
+    def load_train_data(self, space):
+        pass
+        
+    
+class DecoratorMatrixHolder(MatrixHolder):
+    
+    def __init__(self, matrix_holder_object):
+        self.__matrix_holder_object = matrix_holder_object
+        
+    def get_space(self):
+        return self.__matrix_holder_object.space
+        
+    def set_space(self, value):   
+        self.__matrix_holder_object = value         
+
+    def normalize_matrix(self, normalizer, matrix):
+        self.__matrix_holder_object.normalize_matrix()
+    
+    def get_instance_categories(self):
+        return self.__matrix_holder_object.get_instance_categories()
+    
+    def get_instance_namefiles(self):
+        return self.__matrix_holder_object.get_instance_namefiles()
+    
+    def set_instance_categories(self, value):
+        self.__matrix_holder_object.set_instance_categories(value)
+    
+    def set_instance_namefiles(self, value):
+        self.__matrix_holder_object.set_instance_namefiles(value)
+        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        return self.__matrix_holder_object.get_matrix_terms()
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        self.__matrix_holder_object.set_matrix_terms(value)
+        
+    # THESE ARE THE BASIC THINGS THAT THE DECORATOR ADDS FUNCTIONALITY
+        
+    def build_matrix(self):
+        self.__matrix_holder_object.build_matrix()    
+        
+    def get_matrix(self):
+        return self.__matrix_holder_object.get_matrix()
+
+    def set_matrix(self, value):
+        self.__matrix_holder_object.set_matrix()       
+     
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        return self.__matrix_holder_object.get_shared_resource()
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        self.__matrix_holder_object.set_shared_resource(value)
+      
+    def save_train_data(self, space):
+        self.__matrix_holder_object.save_train_data(space)
+    
+    def load_train_data(self, space):
+        return self.__matrix_holder_object.load_train_data(space)
+
+
+class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
+    
+    def __init__(self, matrix_holder, k):
+        super(FixedQuantizedMatrixHolder, self).__init__(matrix_holder)
+        self.__k = k
+        #self.term_matrix = term_matrix
+        self.__clusterer = None
+        
+    def get_k_centers(self):
+        return self.__k
+    
+    def set_k_centers(self, value):
+        self.__k = value
+        
+    def compute_prototypes(self, matrix_terms):
+        k= self.__k
+        
+        clusterer = KMeans(n_clusters=k)
+        clusterer.fit(matrix_terms)
+        
+        self.set_shared_resource(clusterer)
+
+
+    def build_matrix_quantized(self,
+                          space,
+                          virtual_classes_holder,
+                          corpus_file_list,
+                          mat_terms):
+
+        t1 = time.time()
+        print "Starting BOW representation..."
+        
+        k_centers = self.__k
+        clusterer = self.__clusterer
+        
+        len_vocab = len(space._vocabulary)
+
+        Util.create_a_dir(space.space_path + "/sparse")
+        rows_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "rows_sparse.txt", "w")
+        columns_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "columns_sparse.txt", "w")
+        vals_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "vals_sparce.txt", "w")
+        
+        dense_flag = True
+        
+        if ('sparse' in space.kwargs_space) and space.kwargs_space['sparse']:            
+            matrix_docs_prot = numpy.zeros((1, 1),
+                                        dtype=numpy.float64)
+            dense_flag = False
+        else:
+            matrix_docs_prot = numpy.zeros((len(corpus_file_list), k_centers),
+                                        dtype=numpy.float64)
+            dense_flag = True
+        
+        instance_categories = []
+        instance_namefiles = []
+        
+        ################################################################
+        # SUPER SPEED 
+        unorder_dict_index = {}
+        id2word = {}
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+            id2word[u] = term
+        ###############################################################    
+        
+        corpus_bow = []    
+        i = 0      
+        for autor in space.categories:
+            archivos = virtual_classes_holder[autor].cat_file_list
+            for arch in archivos:
+                tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
+                tamDoc = len(tokens)
+                
+                ################################################################
+                # SUPER SPEED 
+                bow = []
+                for pal in docActualFd.keys_sorted():
+                    
+                    if (pal in unorder_dict_index) and tamDoc > 0:
+                        freq = docActualFd[pal] #/ float(tamDoc)
+                    else:
+                        freq = 0.0
+                    
+                    if dense_flag:
+                        bow += [(unorder_dict_index[pal], freq)]
+                        
+                        
+                        #print matrix_docs_docs
+                        
+                        #print "##########################" + str(len(mat_docs_terms))
+                        
+                        #print mat_docs_terms
+                        
+                        #print unorder_dict_index[pal]
+                        
+                        #print "##########################MAT_DOCS_TERMS: " + str(len(mat_docs_terms[:, unorder_dict_index[pal]]))
+                        #print "##########################MAT_DOCS_TERMS_T: " + str(len((mat_docs_terms[:, unorder_dict_index[pal]].transpose()), axis=1))
+                        
+                        #print "##########################MAT_DOCS_DOCS: " + str(len(matrix_docs_docs[i, :]))
+                        print "palabra: ", pal, "   ",unorder_dict_index[pal] 
+                        print "La i: ", i
+                        print clusterer.predict(mat_terms[unorder_dict_index[pal], :])
+                        print "blablabla"
+                        print matrix_docs_prot
+                        matrix_docs_prot[i, clusterer.predict(mat_terms[unorder_dict_index[pal], :])] += freq #/ tamDoc
+                        
+                        
+                    
+                    if freq > 0.0:
+                        rows_file.write(str(i) + "\n")
+                        columns_file.write(str(unorder_dict_index[pal]) + "\n")
+                        vals_file.write(str(freq) + "\n")
+                    
+                ################################################################
+
+                ################################################################
+                # VERY SLOW
+#                j = 0
+#                for pal in space._vocabulary:
+#                        
+#                    if (pal in docActualFd) and tamDoc > 0:
+#                        #print str(freq) + " antes"
+#                        freq = docActualFd[pal] / float(tamDoc) #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
+##                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
+##                        freq = math.log((1 + docActual.diccionario[pal] / (float(docActual.tamDoc))), 2)
+#                        #print str(freq) + " despues"
+#                        # uncomment the following line if you want a boolean weigh :)
+#                        # freq=1.0
+#                        #if pal == "xico":
+#                        #    print pal +"where found in: "  +arch
+#                    else:
+#                        freq = 0
+##                    terminos[j] += freq
+#                    matrix_docs_terms[i,j] = freq
+#
+#                    j += 1
+                    ############################################################
+
+                i+=1
+                
+                instance_categories += [autor]
+                instance_namefiles += [arch]
+                
+                corpus_bow += [bow]
+            
+        #Util.create_a_dir(space.space_path + "/dor")
+        
+        #print corpus_bow
+            
+        #corpora.MmCorpus.serialize(space.space_path + "/dor/" + space.id_space + "_" + self._id_dataset + "_corpus.mm", corpus_bow)
+        #self.corpus_bow = corpora.MmCorpus(space.space_path + "/dor/" + space.id_space + "_" + self._id_dataset + "_corpus.mm") # load a corpus of nine documents, from the Tutorials
+        
+        #print self.corpus_bow
+        
+        self.id2word = id2word
+        
+        #self.tfidf = models.TfidfModel(corpus) # step 1 -- initialize a model
+        
+        #corpus_tfidf = tfidf[corpus]
+        
+        #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
+        #corpus_lsi = lsi[corpus_tfidf]
+
+        self._matrix = matrix_docs_prot
+        self._instance_categories = instance_categories
+        self._instance_namefiles = instance_namefiles
+        
+        rows_file.close()
+        columns_file.close()
+        vals_file.close()
+
+        #print matConceptosTerm
+
+        t2 = time.time()
+        print "End of DOR representation. Time: ", str(t2-t1)
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        cache_file = "%s/%s" % (self.get_space().space_path, self.get_space().id_space)        
+        self.__clusterer =  joblib.load(cache_file + '_clusterer.pkl')
+        return self.__clusterer
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        cache_file = "%s/%s" % (self.get_space().space_path, self.get_space().id_space)
+        joblib.dump(value, cache_file + '_clusterer.pkl')         
+        self.__clusterer=value
+        
+    def get_matrix(self):
+        #super(FixedQuantizedTrainMatrixHolder, self).get_matrix()
+        return self._matrix 
+
+    def set_matrix(self, value):
+        self._matrix = value
+        
+    #def build_matrix(self):
+        # self.__matrix_holder_object.build_matrix()
+        #pass
+        
+        
+class FixedQuantizedTrainMatrixHolder(FixedQuantizedMatrixHolder):
+    
+    def __init__(self, matrix_holder, k):
+        super(FixedQuantizedTrainMatrixHolder, self).__init__(matrix_holder, k)
+        
+    def build_matrix(self):
+        #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        super(FixedQuantizedTrainMatrixHolder, self).build_matrix()
+        
+        self.compute_prototypes(super(FixedQuantizedTrainMatrixHolder, self).get_matrix_terms())
+        #print self.get_matrix_terms()
+        
+        self.build_matrix_quantized(super(FixedQuantizedTrainMatrixHolder, self).get_space(),
+                              super(FixedQuantizedTrainMatrixHolder, self).get_space().virtual_classes_holder_train,
+                              super(FixedQuantizedTrainMatrixHolder, self).get_space().corpus_file_list_train,
+                              super(FixedQuantizedTrainMatrixHolder, self).get_matrix_terms())
+        
+    #def build_matrix(self):
+        # self.__matrix_holder_object.build_matrix()
+        #pass
+        
+    def save_train_data(self, space):
+        super(FixedQuantizedTrainMatrixHolder, self).save_train_data(space)
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        joblib.dump(self.get_shared_resource(), cache_file + '_clusterer.pkl') 
+    
+    def load_train_data(self, space):
+        train_matrix_holder = super(FixedQuantizedTrainMatrixHolder, self).load_train_data(space)
+        train_matrix_holder = FixedQuantizedTrainMatrixHolder(train_matrix_holder, self.get_k_centers()) 
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        train_matrix_holder.set_shared_resource(joblib.load(cache_file + '_clusterer.pkl'))
+    
+        return train_matrix_holder
+         
+    
+class FixedQuantizedTestMatrixHolder(FixedQuantizedMatrixHolder):
+    
+    def __init__(self, matrix_holder_object, k):
+        super(FixedQuantizedTestMatrixHolder, self).__init__(matrix_holder_object, k)
+        
+    def build_matrix(self):
+        #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        super(FixedQuantizedTestMatrixHolder, self).build_matrix()
+        
+        #self.compute_prototypes(super(FixedQuantizedTestMatrixHolder, self).get_matrix_terms())
+        self.set_shared_resource(super(FixedQuantizedTestMatrixHolder, self).get_shared_resource())
+        
+        self.build_matrix_quantized(super(FixedQuantizedTestMatrixHolder, self).get_space(),
+                              super(FixedQuantizedTestMatrixHolder, self).get_space().virtual_classes_holder_test,
+                              super(FixedQuantizedTestMatrixHolder, self).get_space().corpus_file_list_test,
+                              super(FixedQuantizedTestMatrixHolder, self).get_matrix_terms())
+
+    def save_train_data(self, space):
+        super(FixedQuantizedTestMatrixHolder, self).save_train_data(space)
+    
+    def load_train_data(self, space):
+        return super(FixedQuantizedTestMatrixHolder, self).load_train_data(space)
+        
+        
 class CSAMatrixHolder(MatrixHolder):
 
     def __init__(self, space):
@@ -2450,14 +3309,59 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    # ----------------------------------------------------------------------------------        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        return numpy.transpose(self._matrix_concepts_terms)
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        self._matrix_concepts_terms = numpy.transpose(value)
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass       
+        
+    def save_train_data(self, space):
+        
+        if self is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            numpy.save(cache_file + "_mat_terms_concepts.npy", 
+                       self.get_matrix_terms_concepts())
+            
+            numpy.save(cache_file + "_mat_docs_concepts.npy", 
+                       self.get_matrix())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.get_instance_categories())
+        else:
+            print "ERROR CSA: There is not a train matrix terms concepts built"
+            
+    def load_train_data(self, space):
+        
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        csa_train_matrix_holder = CSATrainMatrixHolder(space)        
+        csa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))        
+        csa_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
+        csa_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        csa_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+        
+        return csa_train_matrix_holder   
 
 
 class CSATestMatrixHolder(CSAMatrixHolder):
 
-    def __init__(self, space, matrix_concepts_terms):
+    def __init__(self, space, train_matrix_holder=None, matrix_concepts_terms=None):
         super(CSATestMatrixHolder, self).__init__(space)
-        self._matrix_concepts_terms = matrix_concepts_terms
-        self.build_matrix()
+        self._matrix_concepts_terms = numpy.transpose(train_matrix_holder.get_matrix_terms())
+        #self._matrix_concepts_terms = matrix_concepts_terms
+        #self.build_matrix()
 
     def normalize_matrix(self, normalizer, matrix):
         pass
@@ -2487,6 +3391,25 @@ class CSATestMatrixHolder(CSAMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    # ------------------------------------------------------------------------         
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        return numpy.transpose(self._matrix_concepts_terms)
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        self._matrix_concepts_terms = numpy.transpose(value)
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    def save_train_data(self, space):
+        pass
+
+    def load_train_data(self, space):
+        pass
 
 
 class BOWMatrixHolder(MatrixHolder):
@@ -2494,7 +3417,7 @@ class BOWMatrixHolder(MatrixHolder):
     def __init__(self, space):
         super(BOWMatrixHolder, self).__init__()
         self.space = space
-        self.build_matrix()
+        #self.build_matrix()
 
     def build_matrix_doc_terminos(self,
                                   space,
@@ -2631,6 +3554,45 @@ class BOWTrainMatrixHolder(BOWMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    # ----------------------------------------------------------------------------------        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass        
+        
+    def save_train_data(self, space):
+        
+        if self is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            numpy.save(cache_file + "_mat_docs_terms.npy", 
+                       self.get_matrix())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.get_instance_categories())
+        else:
+            print "ERROR BOW: There is not a train matrix terms concepts built"
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        bow_train_matrix_holder = BOWTrainMatrixHolder(space)        
+        bow_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_terms.npy"))
+        bow_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        bow_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+        
+        return bow_train_matrix_holder 
 
 
 class BOWTestMatrixHolder(BOWMatrixHolder):
@@ -2663,6 +3625,25 @@ class BOWTestMatrixHolder(BOWMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    # ----------------------------------------------------------------------------------        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass      
+    
+    def save_train_data(self, space):
+        pass
+
+    def load_train_data(self, space):
+        pass
 
 
 class LSAMatrixHolder(MatrixHolder):
@@ -2850,13 +3831,19 @@ class LSATrainMatrixHolder(LSAMatrixHolder):
         super(LSATrainMatrixHolder, self).__init__(space, id2word, tfidf, lsa, dataset_label)
         self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_train, self.space.corpus_file_list_train)
         #self._id_dataset="train"
+        if ('concepts' in self.space.kwargs_space):        
+            self.dimensions = self.space.kwargs_space['concepts']
+        else:
+            self.dimensions = 300
         
     def build_matrix(self):
         
-        if ('concepts' in self.space.kwargs_space):        
-            dimensions = self.space.kwargs_space['concepts']
-        else:
-            dimensions = 300
+        dimensions = self.dimensions
+        
+#         if ('concepts' in self.space.kwargs_space):        
+#             self.dimensions = self.space.kwargs_space['concepts']
+#         else:
+#             self.dimensions = 300
             
         #print self.corpus_bow
          
@@ -2875,7 +3862,7 @@ class LSATrainMatrixHolder(LSAMatrixHolder):
             cont_doc += 1
             
         self._matrix = matrix_documents_concepts
-        #End of from sparse to dense                             
+        #End of from sparse to dense                         
 
     def normalize_matrix(self):
         pass   
@@ -2912,22 +3899,123 @@ class LSATrainMatrixHolder(LSAMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    # ------------------------------------------------------        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix        
+        termcorpus = Dense2Corpus(self.get_lsa().projection.u.T)     
+        #print list(termcorpus)
+        
+        #From sparse to dense
+        matrix_terms_concepts = numpy.zeros((len(termcorpus), self.dimensions),
+                                        dtype=numpy.float64)       
+        cont_term=0
+        for term_lsa in termcorpus:            
+            for (index, contribution) in term_lsa:                
+                matrix_terms_concepts[cont_term, index] = contribution            
+            cont_term += 1
+            
+        #End of from sparse to dense  
+            
+        return matrix_terms_concepts
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    def save_train_data(self, space):
+        
+        if self is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            #numpy.save(cache_file + "_mat_terms_concepts.npy", 
+            #           self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
+            
+            id2word = self.get_id2word()            
+            with open(space.space_path + "/lsa/" + space.id_space + "_id2word.txt", 'w') as outfile:
+                json.dump(id2word, outfile)  
+                          
+            tfidf = self.get_tfidf()
+            tfidf.save(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")
+            
+            lsa = self.get_lsa()
+            lsa.save(space.space_path + "/lsa/" + space.id_space + "_model.lsi") # same for tfidf, lda, ...
+            
+            
+            numpy.save(cache_file + "_mat_docs_concepts.npy", 
+                       self.get_matrix())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.get_instance_categories())
+            
+            #self.set_matrix_terms(self)   # is this really necessary???
+            
+        else:
+            print "ERROR LSA: There is not a train matrix terms concepts built"
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        lsa_train_matrix_holder = LSATrainMatrixHolder(space)
+        
+        with open(space.space_path + "/lsa/" + space.id_space + "_id2word.txt", 'r') as infile:
+                id2word = json.load(infile)       
+        tfidf = models.TfidfModel.load(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")      
+        lsa = models.LsiModel.load(space.space_path + "/lsa/" + space.id_space + "_model.lsi")    
+        
+        lsa_train_matrix_holder.set_id2word(id2word)
+        lsa_train_matrix_holder.set_tfidf(tfidf)
+        lsa_train_matrix_holder.set_lsa(lsa)
+          
+        #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        lsa_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
+        lsa_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        lsa_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))    
+        
+        #lsa_train_matrix_holder.set_matrix_terms(lsa_train_matrix_holder)   # this is necessary
+        
+        return lsa_train_matrix_holder
 
 
 class LSATestMatrixHolder(LSAMatrixHolder):
 
-    def __init__(self, space, id2word, tfidf, lsa, dataset_label="test"):
-        super(LSATestMatrixHolder, self).__init__(space, id2word, tfidf, lsa, dataset_label)
-        self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_test, self.space.corpus_file_list_test)
+    def __init__(self, 
+                 space, 
+                 id2word=None, 
+                 tfidf=None, 
+                 lsa=None, 
+                 train_matrix_holder=None, 
+                 dataset_label="test"):
+        
+        train_matrix_holder = self.load_train_data(space)
+        
+        super(LSATestMatrixHolder, self).__init__(space, 
+                                                  train_matrix_holder.id2word, 
+                                                  train_matrix_holder.tfidf, 
+                                                  train_matrix_holder.lsa, 
+                                                  dataset_label)
+        
+        self.build_bowcorpus_id2word(self.space, 
+                                     self.space.virtual_classes_holder_test, 
+                                     self.space.corpus_file_list_test)
+        
+        if ('concepts' in self.space.kwargs_space):        
+            self.dimensions = self.space.kwargs_space['concepts']
+        else:
+            self.dimensions = 300
         #self._id_dataset="test"
         
         
     def build_matrix(self):
         
-        if ('concepts' in self.space.kwargs_space):        
-            dimensions = self.space.kwargs_space['concepts']
-        else:
-            dimensions = 300
+        dimensions = self.dimensions
         
         self.corpus_tfidf = self.tfidf[self.corpus_bow]
         self.corpus_lsa = self.lsa[self.corpus_tfidf]        
@@ -2978,6 +4066,59 @@ class LSATestMatrixHolder(LSAMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    # ------------------------------------------------------        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix        
+        termcorpus = Dense2Corpus(self.get_lsa().projection.u.T)     
+        #print list(termcorpus)
+        
+        #From sparse to dense
+        matrix_terms_concepts = numpy.zeros((len(termcorpus), self.dimensions),
+                                        dtype=numpy.float64)       
+        cont_term=0
+        for term_lsa in termcorpus:            
+            for (index, contribution) in term_lsa:                
+                matrix_terms_concepts[cont_term, index] = contribution            
+            cont_term += 1
+            
+        #End of from sparse to dense  
+        
+        return matrix_terms_concepts
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    def save_train_data(self, space):
+        pass
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        lsa_train_matrix_holder = LSATrainMatrixHolder(space)
+        
+        with open(space.space_path + "/lsa/" + space.id_space + "_id2word.txt", 'r') as infile:
+                id2word = json.load(infile)       
+        tfidf = models.TfidfModel.load(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")      
+        lsa = models.LsiModel.load(space.space_path + "/lsa/" + space.id_space + "_model.lsi")    
+        
+        lsa_train_matrix_holder.set_id2word(id2word)
+        lsa_train_matrix_holder.set_tfidf(tfidf)
+        lsa_train_matrix_holder.set_lsa(lsa)
+          
+        #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        lsa_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
+        lsa_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        lsa_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))    
+        
+        #lsa_train_matrix_holder.set_matrix_terms(lsa_train_matrix_holder)   # this is necessary
+        
+        return lsa_train_matrix_holder
         
 ########### DOR ############
 
@@ -3312,7 +4453,7 @@ class DORMatrixHolder(MatrixHolder):
         #print matConceptosTerm
 
         t2 = time.time()
-        print "End of BOW representation. Time: ", str(t2-t1)
+        print "End of DOR representation. Time: ", str(t2-t1)
         
         
             
@@ -3386,12 +4527,84 @@ class DORTrainMatrixHolder(DORMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    # ------------------------------------------------------
+        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        return numpy.transpose(self._mat_docs_terms)
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        self._mat_docs_terms = numpy.transpose(value)
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    def save_train_data(self, space):
+        
+        if self is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            #numpy.save(cache_file + "_mat_terms_concepts.npy", 
+            #           self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
+            
+            id2word = self.get_id2word()            
+            with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'w') as outfile:
+                json.dump(id2word, outfile)  
+                          
+            #tfidf = self.__dor_train_matrix_holder.get_tfidf()
+            #tfidf.save(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")
+            
+            #dor = self.__dor_train_matrix_holder.get_dor()
+            #dor.save(space.space_path + "/dor/" + space.id_space + "_model.dor") # same for tfidf, lda, ...
+            
+            
+            numpy.save(cache_file + "_mat_docs_docs.npy", 
+                       self.get_matrix())
+            
+            numpy.save(cache_file + "_mat_docs_terms.npy", 
+                       self.get_mat_docs_terms())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.get_instance_categories())
+        else:
+            print "ERROR LSA: There is not a train matrix terms concepts built"
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        dor_train_matrix_holder = DORTrainMatrixHolder(space)
+        
+        with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'r') as infile:
+                id2word = json.load(infile)       
+        #tfidf = models.TfidfModel.load(space.space_path + "/dor/" + space.id_space + "_model.tfidf")      
+        #dor = models.LsiModel.load(space.space_path + "/dor/" + space.id_space + "_model.dor")    
+        
+        dor_train_matrix_holder.set_id2word(id2word)
+        #self.__dor_train_matrix_holder.set_tfidf(tfidf)
+        #self.__dor_train_matrix_holder.set_dor(dor)
+          
+        #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        dor_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_docs.npy"))
+        dor_train_matrix_holder.set_mat_docs_terms(numpy.load(cache_file + "_mat_docs_terms.npy"))
+        dor_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        dor_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+        
+        return dor_train_matrix_holder  
+        
+
 
 
 class DORTestMatrixHolder(DORMatrixHolder):
 
-    def __init__(self, space, id2word, tfidf, lsa, dataset_label="test"):
+    def __init__(self, space, id2word=None, tfidf=None, lsa=None, train_matrix_holder=None, dataset_label="test"):
         super(DORTestMatrixHolder, self).__init__(space, id2word, tfidf, lsa, dataset_label)
+        self.set_matrix_terms(train_matrix_holder.get_matrix_terms())
         #self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_test, self.space.corpus_file_list_test)
         #self._id_dataset="test"
         
@@ -3436,7 +4649,27 @@ class DORTestMatrixHolder(DORMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    # ------------------------------------------------------------------------    
+        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        return numpy.transpose(self._mat_docs_terms)
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        self._mat_docs_terms = numpy.transpose(value)
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    def save_train_data(self, space):
+        pass
 
+    def load_train_data(self, space):
+        pass
+    
 ########### DOR ############       
       
 class LDAMatrixHolder(MatrixHolder):
@@ -3670,12 +4903,105 @@ class LDATrainMatrixHolder(LDAMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    # ------------------------------------------------------        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix   
+        pass 
+#         termcorpus = Dense2Corpus(self.get_lda().projection.u.T)     
+#         #print list(termcorpus)
+#         
+#         #From sparse to dense
+#         matrix_terms_concepts = numpy.zeros((len(termcorpus), self.dimensions),
+#                                         dtype=numpy.float64)       
+#         cont_term=0
+#         for term_lda in termcorpus:            
+#             for (index, contribution) in term_lda:                
+#                 matrix_terms_concepts[cont_term, index] = contribution            
+#             cont_term += 1
+#             
+#         #End of from sparse to dense  
+#             
+#         return matrix_terms_concepts
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+        
+    def save_train_data(self, space):
+        
+        if self is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            #numpy.save(cache_file + "_mat_terms_concepts.npy", 
+            #           self.__lda_train_matrix_holder.get_matrix_terms_concepts())
+            
+            id2word = self.get_id2word()            
+            with open(space.space_path + "/lda/" + space.id_space + "_id2word.txt", 'w') as outfile:
+                json.dump(id2word, outfile)  
+                          
+            tfidf = self.get_tfidf()
+            tfidf.save(space.space_path + "/lda/" + space.id_space + "_model.tfidf")
+            
+            lda = self.get_lda()
+            lda.save(space.space_path + "/lda/" + space.id_space + "_model.lda") # same for tfidf, lda, ...
+            
+            
+            numpy.save(cache_file + "_mat_docs_concepts.npy", 
+                       self.get_matrix())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.get_instance_categories())
+        else:
+            print "ERROR LDA: There is not a train matrix terms concepts built"
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        lda_train_matrix_holder = LDATrainMatrixHolder(space)
+        
+        with open(space.space_path + "/lda/" + space.id_space + "_id2word.txt", 'r') as infile:
+                id2word = json.load(infile)       
+        tfidf = models.TfidfModel.load(space.space_path + "/lda/" + space.id_space + "_model.tfidf")      
+        lda = models.LdaModel.load(space.space_path + "/lda/" + space.id_space + "_model.lda")    
+        
+        lda_train_matrix_holder.set_id2word(id2word)
+        lda_train_matrix_holder.set_tfidf(tfidf)
+        lda_train_matrix_holder.set_lda(lda)
+          
+        #self.__lda_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        lda_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
+        lda_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        lda_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+        
+        return lda_train_matrix_holder 
 
 
 class LDATestMatrixHolder(LDAMatrixHolder):
 
-    def __init__(self, space, id2word, tfidf, lda, dataset_label="test"):
-        super(LDATestMatrixHolder, self).__init__(space, id2word, tfidf, lda, dataset_label)
+    def __init__(self, 
+                 space, 
+                 id2word=None, 
+                 tfidf=None, 
+                 lda=None, 
+                 train_matrix_holder=None, 
+                 dataset_label="test"):
+        
+        train_matrix_holder = self.load_train_data(space)
+        
+        super(LDATestMatrixHolder, self).__init__(space, 
+                                                  train_matrix_holder.id2word, 
+                                                  train_matrix_holder.tfidf, 
+                                                  train_matrix_holder.lda, 
+                                                  dataset_label)
+        
         self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_test, self.space.corpus_file_list_test)
         #self._id_dataset="test"
         
@@ -3724,6 +5050,58 @@ class LDATestMatrixHolder(LDAMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    def save_train_data(self, space):
+        pass
+    
+    # ------------------------------------------------------        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix      
+        pass  
+#         termcorpus = Dense2Corpus(self.get_lda().projection.u.T)     
+#         #print list(termcorpus)
+#         
+#         #From sparse to dense
+#         matrix_terms_concepts = numpy.zeros((len(termcorpus), self.dimensions),
+#                                         dtype=numpy.float64)       
+#         cont_term=0
+#         for term_lda in termcorpus:            
+#             for (index, contribution) in term_lda:                
+#                 matrix_terms_concepts[cont_term, index] = contribution            
+#             cont_term += 1
+#             
+#         #End of from sparse to dense  
+#         
+#         return matrix_terms_concepts
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        lda_train_matrix_holder = LDATrainMatrixHolder(space)
+        
+        with open(space.space_path + "/lda/" + space.id_space + "_id2word.txt", 'r') as infile:
+                id2word = json.load(infile)
+        tfidf = models.TfidfModel.load(space.space_path + "/lda/" + space.id_space + "_model.tfidf")      
+        lda = models.LdaModel.load(space.space_path + "/lda/" + space.id_space + "_model.lda")    
+        
+        lda_train_matrix_holder.set_id2word(id2word)
+        lda_train_matrix_holder.set_tfidf(tfidf)
+        lda_train_matrix_holder.set_lda(lda)
+          
+        #self.__lda_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        lda_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
+        lda_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        lda_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+        
+        return lda_train_matrix_holder 
         
         
 class W2VMatrixHolder(MatrixHolder):
