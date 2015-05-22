@@ -242,6 +242,84 @@ class NeighboringNoOrderBigramsFilterDecoratorByTokenNormalizer(DecoratorByToken
         return new_list_of_tokens  
     
     
+class W2VNeighboringNoOrderBigramsFilterDecoratorByTokenNormalizer(DecoratorByTokenNormalizer):
+
+    def __init__(self, by_token_normalizer):
+        super(W2VNeighboringNoOrderBigramsFilterDecoratorByTokenNormalizer, self).__init__(by_token_normalizer)
+
+    def get_list_of_tokens(self):
+        print "UUUUUUUUUUUUUUUUUUY"
+        old_list_of_tokens = self._by_token_normalizer.get_list_of_tokens()
+        # print old_list_of_tokens
+        
+        new_list_of_tokens = []
+        
+        rows = int(old_list_of_tokens[0])
+        cols = int(old_list_of_tokens[1])
+        tokens = old_list_of_tokens[2:]  
+        
+        base_mat = []
+        for i in range(rows):
+            
+            a = i*cols
+            b = i*cols + cols
+            
+            base_mat += [tokens[a:b]]
+            
+        # print base_mat
+        
+        if (len(base_mat) != rows) or (len(base_mat[0]) != cols) or (len(base_mat[-1]) != cols):
+            print "THE MATRIX HAS A STRANGE SIZE!!!, YOU SHOUL CHECK THIS CASE."
+            
+        for i in range(rows):
+            
+            for j in range(cols):
+                
+                v = ["NOT_A_VISUAL_FEATURE" for e in range(8)]            
+                actual = base_mat[i][j]
+                
+                if ((i-1) >= 0) and ((j-1) >= 0) :                    
+                    v[0] = base_mat[i-1][j-1]
+                    
+                if (j-1) >= 0:
+                    v[1] = base_mat[i][j-1]
+                    
+                if ((i+1) < rows) and ((j-1) >= 0):
+                    v[2] = base_mat[i+1][j-1]
+                    
+                if ((i+1) < rows):
+                    v[3] = base_mat[i+1][j]
+                    
+                if ((i+1) < rows) and ((j+1) < cols):
+                    v[4] = base_mat[i+1][j+1]
+                    
+                if (j+1) < cols:
+                    v[5] = base_mat[i][j+1]
+                    
+                if ((i-1) >= 0) and ((j+1) < cols):
+                    v[6] = base_mat[i-1][j+1]
+                    
+                if (i-1) >= 0:
+                    v[7] = base_mat[i-1][j]
+                    
+                if "NOT_A_VISUAL_FEATURE" in set(v):
+                    continue
+                
+                generated_bigram = []
+                cw = 0
+                for v_e in v:
+                    generated_bigram += [v_e]
+                    if cw == 3:
+                        generated_bigram += [actual]
+                    cw += 1
+                    
+                new_list_of_tokens += generated_bigram
+                #print new_list_of_tokens
+        print "HEEEEEEEEEEEEEEEEEEEEEEY"
+        print new_list_of_tokens
+        return new_list_of_tokens 
+    
+    
 class NeighboringNoOrderTrigramsFilterDecoratorByTokenNormalizer(DecoratorByTokenNormalizer):
 
     def __init__(self, by_token_normalizer):

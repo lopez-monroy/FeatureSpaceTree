@@ -45,6 +45,7 @@ import glob
 import codecs
 import yaml
 import json
+import subprocess
 
 from gensim import corpora, models, similarities
 from sklearn.cluster import KMeans
@@ -1579,7 +1580,8 @@ class EnumRepresentation(object):
      LSA,
      LDA,
      DOR,
-     W2V) = range(6)
+     W2V,
+     VW2V) = range(7)
 
 class AttributeHeader(object):
 
@@ -1655,6 +1657,18 @@ class AttributeHeaderW2V(AttributeHeader):
 
     def __init_(self, fdist, vocabulary, concepts):
         super(AttributeHeaderW2V, self).__init__(fdist, vocabulary, concepts)
+
+    def get_attributes(self):
+        self.__str_concepts = []        
+        for e in range(self._concepts):
+            self.__str_concepts += ["dimension_" + str(e)]
+            
+        return self.__str_concepts
+    
+class AttributeHeaderVW2V(AttributeHeader):
+
+    def __init_(self, fdist, vocabulary, concepts):
+        super(AttributeHeaderVW2V, self).__init__(fdist, vocabulary, concepts)
 
     def get_attributes(self):
         self.__str_concepts = []        
@@ -1745,6 +1759,9 @@ class FactorySimpleRepresentation(FactoryRepresentation):
         
         if option == EnumRepresentation.W2V:
             return FactoryW2VRepresentation()
+        
+        if option == EnumRepresentation.VW2V:
+            return FactoryVW2VRepresentation()
 
 
 class AbstractFactoryRepresentation(object):
@@ -2215,6 +2232,76 @@ class FactoryW2VRepresentation(AbstractFactoryRepresentation):
         
         self.__w2v_train_matrix_holder =  self.__w2v_train_matrix_holder.load_train_data(space)        
         return self.__w2v_train_matrix_holder 
+    
+
+class FactoryVW2VRepresentation(AbstractFactoryRepresentation):
+
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        self.__vw2v_attribute_header = AttributeHeaderVW2V(fdist, vocabulary, space.kwargs_space['concepts'])
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__vw2v_attribute_header = Util.decorate_attribute_header(self.__vw2v_attribute_header,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'])
+        # Decorating --------------------------------------------------      
+           
+        return self.__vw2v_attribute_header
+
+    def create_matrix_train_holder(self, space):        
+        self.__vw2v_train_matrix_holder = VW2VTrainMatrixHolder(space, dataset_label="train") 
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__vw2v_train_matrix_holder = Util.decorate_matrix_holder(self.__vw2v_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__vw2v_train_matrix_holder.build_matrix()
+        return self.__vw2v_train_matrix_holder 
+
+    def create_matrix_test_holder(self,space):
+        # self.__lsa_test_matrix_holder = LSATestMatrixHolder(space, self.__lsa_train_matrix_holder.get_id2word(), self.__lsa_train_matrix_holder.get_tfidf(), self.__lsa_train_matrix_holder.get_lsa(), "test")
+        
+        self.__vw2v_test_matrix_holder = VW2VTestMatrixHolder(space,
+                                                            dataset_label="test")
+
+                                                            #train_matrix_holder=self.__lsa_train_matrix_holder, 
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__vw2v_test_matrix_holder = Util.decorate_matrix_holder(self.__vw2v_test_matrix_holder,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'],
+                                                                        "test")
+        # Decorating --------------------------------------------------
+        
+        self.__vw2v_test_matrix_holder.build_matrix() 
+        return self.__vw2v_test_matrix_holder    
+    
+    def save_train_data(self, space):
+        if self.__vw2v_train_matrix_holder is not None:
+            self.__vw2v_train_matrix_holder.save_train_data(space)
+        else:
+            print "ERROR W2V: There is not a train matrix terms concepts built"
+            
+    def load_train_data(self, space):
+        
+        self.__vw2v_train_matrix_holder = VW2VTrainMatrixHolder(space, dataset_label="train", train=False)
+        
+        # Decorating --------------------------------------------------
+        print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__vw2v_train_matrix_holder = Util.decorate_matrix_holder(self.__vw2v_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__vw2v_train_matrix_holder =  self.__vw2v_train_matrix_holder.load_train_data(space)        
+        return self.__vw2v_train_matrix_holder 
         
     
 class FactoryDORRepresentation(AbstractFactoryRepresentation):
@@ -5302,44 +5389,35 @@ class LDATestMatrixHolder(LDAMatrixHolder):
 
 class W2VMatrixHolder(MatrixHolder):
 
-    def __init__(self, space, id2word=None, tfidf=None, lsa=None, w2v=None, dataset_label="???"):
+    def __init__(self, space, w2v=None, dataset_label="???"):
         super(W2VMatrixHolder, self).__init__()
         self.space = space
-        self.bow_corpus = None
-        self.id2word = id2word
-        self.tfidf = tfidf
-        self.lsa = lsa
-        self.corpus_tfidf = None
-        self.corpus_lsa = None    
+        self.bow_corpus = None    
         self._id_dataset = dataset_label
         self._train_sentences= None
         self._train_model = w2v
         self._matrix_terms_dimensions = None
+        
+        if ('concepts' in self.space.kwargs_space):        
+            self.dimensions = self.space.kwargs_space['concepts']
+        else:
+            self.dimensions = 100
+            
+        if ('min_count' in self.space.kwargs_space):        
+            self.min_count = self.space.kwargs_space['min_count']
+        else:
+            self.min_count = 1
+            
+        if ('workers' in self.space.kwargs_space):        
+            self.workers = self.space.kwargs_space['workers']
+        else:
+            self.workers = 4
         
     def get_w2v(self):
         return self._train_model
     
     def set_w2v(self, value):
         self._train_model = value
-        
-    def get_tfidf(self):
-        return self.tfidf
-    
-    def get_id2word(self):
-        return self.id2word    
-    
-    def get_lsa(self):
-        return self.lsa
-    
-    def set_tfidf(self, tfidf):
-        self.tfidf = tfidf
-    
-    def set_id2word(self, id2word):
-        self.id2word = id2word    
-    
-    def set_lsa(self, lsa):
-        self.lsa = lsa
-    
         
     def build_naive_representation(self,
                           space,
@@ -5584,12 +5662,12 @@ class W2VMatrixHolder(MatrixHolder):
                 
                 corpus_bow += [bow]
             
-        Util.create_a_dir(space.space_path + "/lsa")
+        Util.create_a_dir(space.space_path + "/w2v")
         
         #print corpus_bow
             
-        corpora.MmCorpus.serialize(space.space_path + "/lsa/" + space.id_space + "_" + self._id_dataset + "_corpus.mm", corpus_bow)
-        self.corpus_bow = corpora.MmCorpus(space.space_path + "/lsa/" + space.id_space + "_" + self._id_dataset + "_corpus.mm") # load a corpus of nine documents, from the Tutorials
+        corpora.MmCorpus.serialize(space.space_path + "/w2v/" + space.id_space + "_" + self._id_dataset + "_corpus.mm", corpus_bow)
+        self.corpus_bow = corpora.MmCorpus(space.space_path + "/w2v/" + space.id_space + "_" + self._id_dataset + "_corpus.mm") # load a corpus of nine documents, from the Tutorials
         
         #print self.corpus_bow
         
@@ -5615,79 +5693,30 @@ class W2VMatrixHolder(MatrixHolder):
         t2 = time.time()
         print "End of BOW representation. Time: ", str(t2-t1)
             
-    def build_weight(self,
-                     space,
-                     virtual_classes_holder,
-                     corpus_file_list):
-
-        weighted_matrix_docs_terms = None
-
-        #some code
-
-        return weighted_matrix_docs_terms
-
-    def build_lsi(self):
-        final_matrix_lsi = None
-
-        # some code
-
-        self._matrix = final_matrix_lsi
 
 class W2VTrainMatrixHolder(W2VMatrixHolder):
 
-    def __init__(self, space, id2word=None, tfidf=None, lsa=None, dataset_label="train"):
-        super(W2VTrainMatrixHolder, self).__init__(space, id2word, tfidf, lsa, dataset_label)
+    def __init__(self, space, dataset_label="train", train=True):
+        super(W2VTrainMatrixHolder, self).__init__(space, w2v=None, dataset_label=dataset_label)
         self.build_collect_train_sentences(self.space, 
                                            self.space.virtual_classes_holder_train,
                                            self.space.corpus_file_list_train)
-        #self._id_dataset="train"
-        if ('concepts' in self.space.kwargs_space):        
-            self.dimensions = self.space.kwargs_space['concepts']
-        else:
-            self.dimensions = 300
+            
+        if train == True:
+            self.train_w2v(self._train_sentences)
             
     def train_w2v(self, sentences):
         
-        print self._train_sentences
-        
+        print self._train_sentences        
         self._train_model = Word2Vec(self._train_sentences, 
                                      size=self.dimensions, 
-                                     min_count=1, 
-                                     workers=4)
-        #self._train_model.save('/tmp/mymodel')
-        #new_model = Word2Vec.load('/tmp/mymodel')
+                                     min_count=self.min_count, 
+                                     workers=self.workers)        
         
-        
-    def build_matrix(self):
-
-        #self.build_collect_train_sentences(self.space,
-        #                                   self.space.virtual_classes_holder_train,
-        #                                   self.space.corpus_file_list_train)
-        
-        self.train_w2v(self._train_sentences)
-        
+    def build_matrix(self):                
         self.build_naive_representation(self.space,
                                         self.space.virtual_classes_holder_train,
                                         self.space.corpus_file_list_train)
-                              
-
-    def normalize_matrix(self):
-        pass   
-        
-# 
-#     def build_matrix(self):
-#         matrix_docs_terms = self.build_matrix_doc_terminos(self.space,
-#                                        self.space.virtual_classes_holder_train,
-#                                        self.space.corpus_file_list_train)
-# 
-#         weighted_matrix_docs_terms = self.build_weight(self.space,
-#                                                        self.space.virtual_classes_holder_train,
-#                                                        self.space.corpus_file_list_train,
-#                                                        matrix_docs_terms)
-#         self.build_lsi(self.space,
-#                        self.space.virtual_classes_holder_train,
-#                        self.space.corpus_file_list_train,
-#                        weighted_matrix_docs_terms)
 
     def get_matrix(self):
         return self._matrix
@@ -5706,6 +5735,9 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    def normalize_matrix(self, normalizer, matrix):
+        pass
         
     # ------------------------------------------------------        
     def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix                     
@@ -5727,10 +5759,6 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
             
             #numpy.save(cache_file + "_mat_terms_concepts.npy", 
             #           self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
-            
-            id2word = self.get_id2word()            
-            with open(space.space_path + "/w2v/" + space.id_space + "_id2word.txt", 'w') as outfile:
-                json.dump(id2word, outfile)  
                           
             w2v = self.get_w2v()
             w2v.save(space.space_path + "/w2v/" + space.id_space + "_w2v_model") # same for tfidf, lda, ...
@@ -5753,16 +5781,11 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
     def load_train_data(self, space):
         cache_file = "%s/%s" % (space.space_path, space.id_space)
         
-        w2v_train_matrix_holder = W2VTrainMatrixHolder(space)
-        
-        with open(space.space_path + "/w2v/" + space.id_space + "_id2word.txt", 'r') as infile:
-                id2word = json.load(infile)       
+        w2v_train_matrix_holder = W2VTrainMatrixHolder(space, train=False) 
       
         w2v = Word2Vec()
         w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
-        w2v_train_matrix_holder.set_id2word(id2word)
-        #w2v_train_matrix_holder.set_tfidf(tfidf)
         w2v_train_matrix_holder.set_w2v(w2v)
           
         #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
@@ -5778,55 +5801,21 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
 class W2VTestMatrixHolder(W2VMatrixHolder):
 
     def __init__(self, 
-                 space, 
-                 id2word=None, 
-                 tfidf=None, 
-                 lsa=None, 
+                 space,
                  train_matrix_holder=None, 
                  dataset_label="test"):
         
         train_matrix_holder = self.load_train_data(space)
         
         super(W2VTestMatrixHolder, self).__init__(space, 
-                                                  None, 
-                                                  None, 
-                                                  None, 
                                                   w2v=train_matrix_holder.get_w2v(),
-                                                  dataset_label=dataset_label)
-        
-        #self.build_bowcorpus_id2word(self.space, 
-        #                             self.space.virtual_classes_holder_test, 
-        #                             self.space.corpus_file_list_test)
-        
-        if ('concepts' in self.space.kwargs_space):        
-            self.dimensions = self.space.kwargs_space['concepts']
-        else:
-            self.dimensions = 300
-        #self._id_dataset="test"
-        
+                                                  dataset_label=dataset_label)     
         
     def build_matrix(self):
         
         self.build_naive_representation(self.space,
                                         self.space.virtual_classes_holder_test,
                                         self.space.corpus_file_list_test)   
-
-    def normalize_matrix(self):
-        pass
-
-#     def build_matrix(self):
-#         matrix_docs_terms = self.build_matrix_doc_terminos(self.space,
-#                                        self.space.virtual_classes_holder_test,
-#                                        self.space.corpus_file_list_test)
-# 
-#         weighted_matrix_docs_terms = self.build_weight(self.space,
-#                                                        self.space.virtual_classes_holder_test,
-#                                                        self.space.corpus_file_list_test,
-#                                                        matrix_docs_terms)
-#         self.build_lsi(self.space,
-#                        self.space.virtual_classes_holder_test,
-#                        self.space.corpus_file_list_test,
-#                        weighted_matrix_docs_terms)
 
     def get_matrix(self):
         return self._matrix
@@ -5845,6 +5834,9 @@ class W2VTestMatrixHolder(W2VMatrixHolder):
     
     def set_instance_namefiles(self, value):
         self._instance_namefiles = value
+        
+    def normalize_matrix(self, normalizer, matrix):
+        pass
         
     # ------------------------------------------------------        
     def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix                     
@@ -5865,16 +5857,11 @@ class W2VTestMatrixHolder(W2VMatrixHolder):
     def load_train_data(self, space):
         cache_file = "%s/%s" % (space.space_path, space.id_space)
         
-        w2v_train_matrix_holder = W2VTrainMatrixHolder(space)
-        
-        with open(space.space_path + "/w2v/" + space.id_space + "_id2word.txt", 'r') as infile:
-                id2word = json.load(infile)       
-      
+        w2v_train_matrix_holder = W2VTrainMatrixHolder(space, train=False)
+              
         w2v = Word2Vec()
         w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
-        w2v_train_matrix_holder.set_id2word(id2word)
-        #w2v_train_matrix_holder.set_tfidf(tfidf)
         w2v_train_matrix_holder.set_w2v(w2v)
           
         #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
@@ -5885,6 +5872,506 @@ class W2VTestMatrixHolder(W2VMatrixHolder):
         #lsa_train_matrix_holder.set_matrix_terms(lsa_train_matrix_holder)   # this is necessary
         
         return w2v_train_matrix_holder
+    
+    
+class VW2VMatrixHolder(MatrixHolder):
+
+    def __init__(self, space, w2v=None, dataset_label="???"):
+        super(VW2VMatrixHolder, self).__init__()
+        self.space = space
+        self.bow_corpus = None    
+        self._id_dataset = dataset_label
+        self._train_sentences= None
+        self._train_model = w2v
+        self._matrix_terms_dimensions = None
+        
+        if ('concepts' in self.space.kwargs_space):        
+            self.dimensions = self.space.kwargs_space['concepts']
+        else:
+            self.dimensions = 100
+            
+        if ('min_count' in self.space.kwargs_space):        
+            self.min_count = self.space.kwargs_space['min_count']
+        else:
+            self.min_count = 1
+            
+        if ('workers' in self.space.kwargs_space):        
+            self.workers = self.space.kwargs_space['workers']
+        else:
+            self.workers = 4
+        
+    def get_w2v(self):
+        return self._train_model
+    
+    def set_w2v(self, value):
+        self._train_model = value
+        
+    def build_naive_representation(self,
+                          space,
+                          virtual_classes_holder,
+                          corpus_file_list):
+
+        t1 = time.time()
+        print "Starting BOW representation..."
+        
+        dimensions = self.dimensions
+        
+        len_vocab = len(space._vocabulary)
+
+        Util.create_a_dir(space.space_path + "/sparse")
+        rows_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "rows_sparse.txt", "w")
+        columns_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "columns_sparse.txt", "w")
+        vals_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "vals_sparce.txt", "w")
+        
+        dense_flag = True
+        
+        if ('sparse' in space.kwargs_space) and space.kwargs_space['sparse']:            
+            matrix_docs_terms = numpy.zeros((1, 1),
+                                        dtype=numpy.float64)
+            dense_flag = False
+        else:
+            matrix_docs_terms = numpy.zeros((len(corpus_file_list), dimensions),
+                                        dtype=numpy.float64)
+            dense_flag = True
+        
+        instance_categories = []
+        instance_namefiles = []
+        
+        ################################################################
+        # SUPER SPEED 
+        unorder_dict_index = {}
+        id2word = {}
+        mat_terms_dimensions = numpy.zeros((len_vocab, dimensions), dtype=numpy.float64)
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+            id2word[u] = term
+            mat_terms_dimensions[u, :] = self._train_model[term]
+        self._matrix_terms_dimensions = mat_terms_dimensions
+        ###############################################################    
+        
+        corpus_bow = []    
+        i = 0      
+        for autor in space.categories:
+            archivos = virtual_classes_holder[autor].cat_file_list
+            for arch in archivos:
+                tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
+
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
+                tamDoc = len(tokens)
+                
+                ################################################################
+                # SUPER SPEED 
+                bow = []
+                for pal in docActualFd.keys_sorted():
+                    
+                    if (pal in unorder_dict_index) and tamDoc > 0:
+                        freq = docActualFd[pal] #/ float(tamDoc)
+                    else:
+                        freq = 0.0
+                    
+                    if dense_flag:
+                        bow += [(unorder_dict_index[pal], freq)]
+                        matrix_docs_terms[i, :] += self._train_model[pal] * freq
+                        #matrix_docs_terms[i, unorder_dict_index[pal]] = freq
+                    
+                    if freq > 0.0:
+                        rows_file.write(str(i) + "\n")
+                        columns_file.write(str(unorder_dict_index[pal]) + "\n")
+                        vals_file.write(str(freq) + "\n")
+                    
+                ################################################################
+
+                ################################################################
+                # VERY SLOW
+#                j = 0
+#                for pal in space._vocabulary:
+#                        
+#                    if (pal in docActualFd) and tamDoc > 0:
+#                        #print str(freq) + " antes"
+#                        freq = docActualFd[pal] / float(tamDoc) #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
+##                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
+##                        freq = math.log((1 + docActual.diccionario[pal] / (float(docActual.tamDoc))), 2)
+#                        #print str(freq) + " despues"
+#                        # uncomment the following line if you want a boolean weigh :)
+#                        # freq=1.0
+#                        #if pal == "xico":
+#                        #    print pal +"where found in: "  +arch
+#                    else:
+#                        freq = 0
+##                    terminos[j] += freq
+#                    matrix_docs_terms[i,j] = freq
+#
+#                    j += 1
+                    ############################################################
+                
+                if tamDoc > 0:
+                    matrix_docs_terms[i, :] = matrix_docs_terms[i, :] / tamDoc
+                
+                i+=1
+                
+                instance_categories += [autor]
+                instance_namefiles += [arch]
+                
+                corpus_bow += [bow]
+            
+        Util.create_a_dir(space.space_path + "/w2v")
+        
+        #print corpus_bow
+            
+        corpora.MmCorpus.serialize(space.space_path + "/w2v/" + space.id_space + "_" + self._id_dataset + "_corpus.mm", corpus_bow)
+        self.corpus_bow = corpora.MmCorpus(space.space_path + "/w2v/" + space.id_space + "_" + self._id_dataset + "_corpus.mm") # load a corpus of nine documents, from the Tutorials
+        
+        #print self.corpus_bow
+        
+        self.id2word = id2word
+        
+        #self.tfidf = models.TfidfModel(corpus) # step 1 -- initialize a model
+        
+        #corpus_tfidf = tfidf[corpus]
+        
+        #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
+        #corpus_lsi = lsi[corpus_tfidf]
+
+        self._matrix = matrix_docs_terms
+        self._instance_categories = instance_categories
+        self._instance_namefiles = instance_namefiles
+        
+        rows_file.close()
+        columns_file.close()
+        vals_file.close()
+
+        #print matConceptosTerm
+
+        t2 = time.time()
+        print "End of BOW representation. Time: ", str(t2-t1)
+        
+    def build_collect_train_sentences(self,
+                          space,
+                          virtual_classes_holder,
+                          corpus_file_list):
+
+
+        t1 = time.time()
+        print "Starting BOW representation..."
+        
+        self._train_sentences = []
+        
+        len_vocab = len(space._vocabulary)
+
+        Util.create_a_dir(space.space_path + "/sparse")
+        rows_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "rows_sparse.txt", "w")
+        columns_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "columns_sparse.txt", "w")
+        vals_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "vals_sparce.txt", "w")
+        
+        dense_flag = True
+        
+        if ('sparse' in space.kwargs_space) and space.kwargs_space['sparse']:            
+            matrix_docs_terms = numpy.zeros((1, 1),
+                                        dtype=numpy.float64)
+            dense_flag = False
+        else:
+            matrix_docs_terms = numpy.zeros((len(corpus_file_list), len_vocab),
+                                        dtype=numpy.float64)
+            dense_flag = True
+        
+        instance_categories = []
+        instance_namefiles = []
+        
+        ################################################################
+        # SUPER SPEED 
+        unorder_dict_index = {}
+        id2word = {}
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+            id2word[u] = term
+        ###############################################################    
+        
+        corpus_bow = []    
+        i = 0      
+        for autor in space.categories:
+            archivos = virtual_classes_holder[autor].cat_file_list
+            for arch in archivos:
+                tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
+                
+                self._train_sentences += [tokens]
+                
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
+                tamDoc = len(tokens)
+                
+                ################################################################
+                # SUPER SPEED 
+                bow = []
+                for pal in docActualFd.keys_sorted():
+                    
+                    if (pal in unorder_dict_index) and tamDoc > 0:
+                        freq = docActualFd[pal] #/ float(tamDoc)
+                    else:
+                        freq = 0.0
+                    
+                    if dense_flag:
+                        bow += [(unorder_dict_index[pal], freq)]
+                        #matrix_docs_terms[i, unorder_dict_index[pal]] = freq
+                    
+                    if freq > 0.0:
+                        rows_file.write(str(i) + "\n")
+                        columns_file.write(str(unorder_dict_index[pal]) + "\n")
+                        vals_file.write(str(freq) + "\n")
+                    
+                ################################################################
+
+                ################################################################
+                # VERY SLOW
+#                j = 0
+#                for pal in space._vocabulary:
+#                        
+#                    if (pal in docActualFd) and tamDoc > 0:
+#                        #print str(freq) + " antes"
+#                        freq = docActualFd[pal] / float(tamDoc) #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
+##                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
+##                        freq = math.log((1 + docActual.diccionario[pal] / (float(docActual.tamDoc))), 2)
+#                        #print str(freq) + " despues"
+#                        # uncomment the following line if you want a boolean weigh :)
+#                        # freq=1.0
+#                        #if pal == "xico":
+#                        #    print pal +"where found in: "  +arch
+#                    else:
+#                        freq = 0
+##                    terminos[j] += freq
+#                    matrix_docs_terms[i,j] = freq
+#
+#                    j += 1
+                    ############################################################
+
+                i+=1
+                
+                instance_categories += [autor]
+                instance_namefiles += [arch]
+                
+                corpus_bow += [bow]
+            
+        Util.create_a_dir(space.space_path + "/w2v")
+        
+        #print corpus_bow
+            
+        corpora.MmCorpus.serialize(space.space_path + "/w2v/" + space.id_space + "_" + self._id_dataset + "_corpus.mm", corpus_bow)
+        self.corpus_bow = corpora.MmCorpus(space.space_path + "/w2v/" + space.id_space + "_" + self._id_dataset + "_corpus.mm") # load a corpus of nine documents, from the Tutorials
+        
+        #print self.corpus_bow
+        
+        self.id2word = id2word
+        
+        #self.tfidf = models.TfidfModel(corpus) # step 1 -- initialize a model
+        
+        #corpus_tfidf = tfidf[corpus]
+        
+        #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
+        #corpus_lsi = lsi[corpus_tfidf]
+
+        self._matrix = matrix_docs_terms
+        self._instance_categories = instance_categories
+        self._instance_namefiles = instance_namefiles
+        
+        rows_file.close()
+        columns_file.close()
+        vals_file.close()
+
+        #print matConceptosTerm
+
+        t2 = time.time()
+        print "End of BOW representation. Time: ", str(t2-t1)
+            
+
+class VW2VTrainMatrixHolder(W2VMatrixHolder):
+
+    def __init__(self, space, dataset_label="train", train=True):
+        super(VW2VTrainMatrixHolder, self).__init__(space, w2v=None, dataset_label=dataset_label)
+        self.build_collect_train_sentences(self.space, 
+                                           self.space.virtual_classes_holder_train,
+                                           self.space.corpus_file_list_train)
+        
+        if train == True:
+            self.train_w2v(self._train_sentences)
+            
+    def train_w2v(self, sentences):        
+        print self._train_sentences   
+        Util.create_a_dir(self.space.space_path + "/w2vC")
+        train_path_file = self.space.space_path + "/w2vC/" + self.space.id_space + "train" + self.space.kwargs_space['vectors']
+        f_training_file = open(train_path_file, 'w')
+        
+        for sentence in self._train_sentences:
+            f_training_file.write(" ".join(sentence) + "\n")
+        
+        f_training_file.close()
+        # "time ./word2vec -train textPastorVW.txt -output vectorsPastor.txt -cbow 1 -size 50 -window 4 -negative 25 -hs 0 -sample 0 -threads 1 -binary 0 -iter 3 -min-count 1"
+        self._vectors = self.space.space_path + "/w2vC/" + self.space.id_space + self.space.kwargs_space['vectors'] 
+        #train_path_file = ""
+        self._w2v_command = self.space.kwargs_space['exec_path'] + " -train " + train_path_file +  " -output " + self._vectors + " -cbow 1 -size 50 -window 4 -negative 25 -hs 0 -sample 0 -threads 1 -binary 0 -iter 3 -min-count 1"
+
+        print self._w2v_command
+        subprocess.call(self._w2v_command, shell=True)             
+        self._train_model = Word2Vec.load_word2vec_format(self._vectors, binary=False)              
+        
+    def build_matrix(self):                
+        self.build_naive_representation(self.space,
+                                        self.space.virtual_classes_holder_train,
+                                        self.space.corpus_file_list_train)
+
+    def get_matrix(self):
+        return self._matrix
+    
+    def get_instance_categories(self):
+        return self._instance_categories
+    
+    def get_instance_namefiles(self):
+        return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
+        
+    def normalize_matrix(self, normalizer, matrix):
+        pass
+        
+    # ------------------------------------------------------        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix                     
+        return self._matrix_terms_dimensions
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        self._matrix_terms_dimensions = value
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    def save_train_data(self, space):
+        
+        if self is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            #numpy.save(cache_file + "_mat_terms_concepts.npy", 
+            #           self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
+                          
+            w2v = self.get_w2v()
+            w2v.save(space.space_path + "/w2v/" + space.id_space + "_w2v_model") # same for tfidf, lda, ...
+            
+            
+            numpy.save(cache_file + "_mat_docs_concepts.npy", 
+                       self.get_matrix())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.get_instance_categories())
+            
+            #self.set_matrix_terms(self)   # is this really necessary???
+            
+        else:
+            print "ERROR W2V: There is not a train matrix terms concepts built"
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        w2v_train_matrix_holder = VW2VTrainMatrixHolder(space, train=False) 
+      
+        w2v = Word2Vec()
+        w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        
+        w2v_train_matrix_holder.set_w2v(w2v)
+          
+        #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        w2v_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
+        w2v_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        w2v_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))    
+        
+        #lsa_train_matrix_holder.set_matrix_terms(lsa_train_matrix_holder)   # this is necessary
+        
+        return w2v_train_matrix_holder
+
+
+class VW2VTestMatrixHolder(W2VMatrixHolder):
+
+    def __init__(self, 
+                 space,
+                 train_matrix_holder=None, 
+                 dataset_label="test"):
+        
+        train_matrix_holder = self.load_train_data(space)
+        
+        super(VW2VTestMatrixHolder, self).__init__(space, 
+                                                  w2v=train_matrix_holder.get_w2v(),
+                                                  dataset_label=dataset_label)     
+        
+    def build_matrix(self):
+        
+        self.build_naive_representation(self.space,
+                                        self.space.virtual_classes_holder_test,
+                                        self.space.corpus_file_list_test)   
+
+    def get_matrix(self):
+        return self._matrix
+    
+    def get_instance_categories(self):
+        return self._instance_categories
+    
+    def get_instance_namefiles(self):
+        return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
+        
+    def normalize_matrix(self, normalizer, matrix):
+        pass
+        
+    # ------------------------------------------------------        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix                     
+        return self._matrix_terms_dimensions
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        self._matrix_terms_dimensions = value
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    def save_train_data(self, space):
+        pass
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        w2v_train_matrix_holder = VW2VTrainMatrixHolder(space, train=False)
+              
+        w2v = Word2Vec()
+        w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        
+        w2v_train_matrix_holder.set_w2v(w2v)
+          
+        #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        w2v_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_concepts.npy"))
+        w2v_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        w2v_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))    
+        
+        #lsa_train_matrix_holder.set_matrix_terms(lsa_train_matrix_holder)   # this is necessary
+        
+        return w2v_train_matrix_holder
+        
+       
         
         
 # ----------------------------------------

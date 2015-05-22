@@ -67,8 +67,9 @@ class EnumDecoratorByTokenNormalizer(object):
      NEIGHBORING_NO_ORDER_BIGRAMS,
      NEIGHBORING_NO_ORDER_TRIGRAMS, 
      NEIGHBORING_NO_ORDER_TETRAGRAMS,
+     W2VNEIGHBORING_NO_ORDER_BIGRAMS,
      SKIP_SIZE_INFO,
-     MAX_PATTERNS_BY_ROW) = range(12)
+     MAX_PATTERNS_BY_ROW) = range(13)
      
 
 class FactorySimpleDecoratorByTokenNormalizer(object):
@@ -100,6 +101,9 @@ class FactorySimpleDecoratorByTokenNormalizer(object):
         
         if option == EnumDecoratorByTokenNormalizer.NEIGHBORING_NO_ORDER_BIGRAMS:
             return NeighboringNoOrderBigramsFilterDecoratorByTokenNormalizer(by_token_normalizer)
+        
+        if option == EnumDecoratorByTokenNormalizer.W2VNEIGHBORING_NO_ORDER_BIGRAMS:
+            return W2VNeighboringNoOrderBigramsFilterDecoratorByTokenNormalizer(by_token_normalizer)
         
         if option == EnumDecoratorByTokenNormalizer.NEIGHBORING_NO_ORDER_TRIGRAMS:
             return NeighboringNoOrderTrigramsFilterDecoratorByTokenNormalizer(by_token_normalizer)
