@@ -85,7 +85,7 @@ class ModeCorpus(object):
                 
                 # terms.kwargs["string"] = \
                 # terms.kwargs["corpus"].raw(fileids=[f_src]).encode('utf-8', 'ignore') # .lower()
-                
+                # print f_src
                 terms.kwargs["string"] = terms.kwargs["corpus"].raw(fileids=[f_src]) # .lower()
 
                 # Apply all RawStringNormalizers -------------------------------

@@ -2679,7 +2679,11 @@ class FactorySimpleDecoratorMatrixHolder(FactoryDecoratorMatrixHolder):
 
     def create(self, option, kwargs, matrix_holder): # all this arguments kwargs and matrix_holder necessaries???
         if option == EnumDecoratorsMatrixHolder.FIXED_QUANTIZED:
-            return FactoryQuantizedDecoratorMatrixHolder(kwargs["k_centers"]);
+            if "precomputed_dict" in kwargs:
+                pc = kwargs["precomputed_dict"]
+            else:
+                pc = "NO_PRECOMPUTED"
+            return FactoryQuantizedDecoratorMatrixHolder(k_centers=kwargs["k_centers"], precomputed_dict=pc);
         if option == EnumDecoratorsMatrixHolder.NORM_SUM_ONE:
             return FactoryNormalizedProbsDecoratorMatrixHolder();
 
@@ -2719,17 +2723,18 @@ class AbstractFactoryDecoratorMatrixHolder(object):
 
 class FactoryQuantizedDecoratorMatrixHolder(AbstractFactoryDecoratorMatrixHolder):
     
-    def __init__(self, k_centers):
+    def __init__(self, k_centers=300, precomputed_dict="NO_PRECOMPUTED"):
         self.k_centers = k_centers
+        self.precomputed_dict = precomputed_dict
 
     def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
         return FixedQuantizedAttributeHeader(fdist, vocabulary, concepts)
 
     def create_matrix_train_holder(self, matrix_holder, space):        
-        return FixedQuantizedTrainMatrixHolder(matrix_holder, self.k_centers)
+        return FixedQuantizedTrainMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict)
 
     def create_matrix_test_holder(self, matrix_holder, space):
-        return FixedQuantizedTestMatrixHolder(matrix_holder, self.k_centers)
+        return FixedQuantizedTestMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict)
     
     def save_train_data(self, space):
         pass
@@ -2817,11 +2822,12 @@ class DecoratorMatrixHolder(MatrixHolder):
 
 class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
     
-    def __init__(self, matrix_holder, k):
+    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED"):
         super(FixedQuantizedMatrixHolder, self).__init__(matrix_holder)
         self.__k = k
         #self.term_matrix = term_matrix
         self.__clusterer = None
+        self._precomputed_dict=precomputed_dict
         
     def get_k_centers(self):
         return self.__k
@@ -2832,8 +2838,15 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
     def compute_prototypes(self, matrix_terms):
         k= self.__k
         
-        clusterer = KMeans(n_clusters=k)
-        clusterer.fit(matrix_terms)
+        print "Begining clustering."
+        if self._precomputed_dict == "NO_PRECOMPUTED":
+            clusterer = KMeans(n_clusters=k, verbose=1, n_jobs=4)
+            clusterer.fit(matrix_terms)
+        else:
+            cache_file = self._precomputed_dict        
+            clusterer =  joblib.load(cache_file)
+            
+        print "End of clustering."
         
         self.set_shared_resource(clusterer)
 
@@ -2875,9 +2888,11 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
         # SUPER SPEED 
         unorder_dict_index = {}
         id2word = {}
+        word2prediction = {}
         for (term, u) in zip(space._vocabulary, range(len_vocab)):
             unorder_dict_index[term] = u
             id2word[u] = term
+            word2prediction[term] = clusterer.predict(mat_terms[unorder_dict_index[term], :])
         ###############################################################    
         
         corpus_bow = []    
@@ -2888,7 +2903,7 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
                 tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
                 docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
                 tamDoc = len(tokens)
-                
+                print "document: ", i
                 ################################################################
                 # SUPER SPEED 
                 bow = []
@@ -2915,12 +2930,14 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
                         #print "##########################MAT_DOCS_TERMS_T: " + str(len((mat_docs_terms[:, unorder_dict_index[pal]].transpose()), axis=1))
                         
                         #print "##########################MAT_DOCS_DOCS: " + str(len(matrix_docs_docs[i, :]))
-                        print "palabra: ", pal, "   ",unorder_dict_index[pal] 
-                        print "La i: ", i
-                        print clusterer.predict(mat_terms[unorder_dict_index[pal], :])
-                        print "blablabla"
-                        print matrix_docs_prot
-                        matrix_docs_prot[i, clusterer.predict(mat_terms[unorder_dict_index[pal], :])] += freq #/ tamDoc
+                        ####### print "palabra: ", pal, "   ",unorder_dict_index[pal] 
+                        #######print "La i: ", i
+                        #######print clusterer.predict(mat_terms[unorder_dict_index[pal], :])
+                        #######print "blablabla"
+                        #######print matrix_docs_prot
+                        # FIXED: bottle neck
+                        # matrix_docs_prot[i, clusterer.predict(mat_terms[unorder_dict_index[pal], :])] += freq #/ tamDoc
+                        matrix_docs_prot[i, word2prediction[pal]] += freq #/ tamDoc
                         
                         
                     
@@ -2953,8 +2970,9 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
 #
 #                    j += 1
                     ############################################################
-
+                
                 i+=1
+                
                 
                 instance_categories += [autor]
                 instance_namefiles += [arch]
@@ -3016,8 +3034,8 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
         
 class FixedQuantizedTrainMatrixHolder(FixedQuantizedMatrixHolder):
     
-    def __init__(self, matrix_holder, k):
-        super(FixedQuantizedTrainMatrixHolder, self).__init__(matrix_holder, k)
+    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED"):
+        super(FixedQuantizedTrainMatrixHolder, self).__init__(matrix_holder, k, precomputed_dict)
         
     def build_matrix(self):
         #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
@@ -3051,8 +3069,8 @@ class FixedQuantizedTrainMatrixHolder(FixedQuantizedMatrixHolder):
     
 class FixedQuantizedTestMatrixHolder(FixedQuantizedMatrixHolder):
     
-    def __init__(self, matrix_holder_object, k):
-        super(FixedQuantizedTestMatrixHolder, self).__init__(matrix_holder_object, k)
+    def __init__(self, matrix_holder_object, k=300, precomputed_dict="NO_PRECOMPUTED"):
+        super(FixedQuantizedTestMatrixHolder, self).__init__(matrix_holder_object, k, precomputed_dict)
         
     def build_matrix(self):
         #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
@@ -5412,6 +5430,11 @@ class W2VMatrixHolder(MatrixHolder):
             self.workers = self.space.kwargs_space['workers']
         else:
             self.workers = 4
+            
+        if 'w2v_txt' in self.space.kwargs_space:
+            self._w2v_txt = self.space.kwargs_space['w2v_txt']
+        else:
+            self._w2v_txt = "NO_PROVIDED"
         
     def get_w2v(self):
         return self._train_model
@@ -5707,11 +5730,15 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
             
     def train_w2v(self, sentences):
         
-        print self._train_sentences        
-        self._train_model = Word2Vec(self._train_sentences, 
-                                     size=self.dimensions, 
-                                     min_count=self.min_count, 
-                                     workers=self.workers)        
+        # print self._train_sentences  
+        
+        if self._w2v_txt == "NOT_PROVIDED":      
+            self._train_model = Word2Vec(self._train_sentences, 
+                                         size=self.dimensions, 
+                                         min_count=self.min_count, 
+                                         workers=self.workers)
+        else:
+            self._train_model = Word2Vec.load_word2vec_format(self._w2v_txt, binary=False)   
         
     def build_matrix(self):                
         self.build_naive_representation(self.space,

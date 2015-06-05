@@ -411,15 +411,26 @@ class VocabularyVirtualProcessor(VirtualProcessor):
         
         print "SUPRASTEP: 7"
         fdist = FreqDistExt()
+        # cont_a=0
         for virtual_vocabulary in self.virtual_elements:
-
+            
+            # print "a: ",cont_a
+            
+            # cont_b=0
             for token in virtual_vocabulary.fdist.keys_sorted():
-
-                if token in fdist.keys_sorted():
+                
+                # print "a: ",cont_a,"b: ",cont_b
+                
+                # FIXED: bottle neck: it is not necessary to sort in this part
+                #if token in fdist.keys_sorted():
+                if token in fdist:
                     fdist[token] += virtual_vocabulary.fdist[token]
                 else:
                     fdist[token] = virtual_vocabulary.fdist[token]
+                    
+                # cont_b += 1
 
+            # cont_a += 1
         #print "SSSSSSSSSS:" +str(fdist)
 
         print "SUBSTEP: 8"
@@ -568,7 +579,9 @@ class FilterVocabularyVirtualReProcessor(VirtualReProcessor):
         for virtual_vocabulary in self.new_virtual_elements:
             for token in virtual_vocabulary.fdist:
 
-                if(token in fdist.keys_sorted()):
+                # FIXED: bottle neck
+                # if(token in fdist.keys_sorted()):
+                if(token in fdist):
                     fdist[token] += virtual_vocabulary.fdist[token]
                 else:
                     fdist[token] = virtual_vocabulary.fdist[token]
@@ -630,7 +643,10 @@ class FilterVocabularyVirtualGlobalProcessor(VirtualGlobalProcessor):
         for virtual_vocabulary in self.virtual_elements:
 
             for token in virtual_vocabulary.fdist.keys_sorted():
-                if(token in fdist.keys_sorted()):
+                
+                # FIXED: bottle neck
+                # if(token in fdist.keys_sorted()):
+                if token in fdist:
                     fdist[token] += virtual_vocabulary.fdist[token]
                 else:
                     fdist[token] = virtual_vocabulary.fdist[token]
