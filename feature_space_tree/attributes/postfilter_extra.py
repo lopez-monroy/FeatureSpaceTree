@@ -248,7 +248,7 @@ class W2VNeighboringNoOrderBigramsFilterDecoratorByTokenNormalizer(DecoratorByTo
         super(W2VNeighboringNoOrderBigramsFilterDecoratorByTokenNormalizer, self).__init__(by_token_normalizer)
 
     def get_list_of_tokens(self):
-        print "UUUUUUUUUUUUUUUUUUY"
+        #print "UUUUUUUUUUUUUUUUUUY"
         old_list_of_tokens = self._by_token_normalizer.get_list_of_tokens()
         # print old_list_of_tokens
         
@@ -315,8 +315,8 @@ class W2VNeighboringNoOrderBigramsFilterDecoratorByTokenNormalizer(DecoratorByTo
                     
                 new_list_of_tokens += generated_bigram
                 #print new_list_of_tokens
-        print "HEEEEEEEEEEEEEEEEEEEEEEY"
-        print new_list_of_tokens
+        #print "HEEEEEEEEEEEEEEEEEEEEEEY"
+        #print new_list_of_tokens
         return new_list_of_tokens 
     
     
