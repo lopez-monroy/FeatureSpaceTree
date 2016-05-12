@@ -245,6 +245,7 @@ class SpecificTokensVocabulary(FilterVocabulary):
 
         return new_fdist_selected
     
+
 class RemoveSpecificTokensVocabulary(FilterVocabulary):
     '''Remove the list list_specific_tokens from the document's vocabulary
     '''
@@ -267,6 +268,32 @@ class RemoveSpecificTokensVocabulary(FilterVocabulary):
             new_fdist_selected[token] = old_fdist_selected[token]
 
         return new_fdist_selected  
+
+
+class DoubleBiasFreqVocabulary(FilterVocabulary):
+
+    def __init__(self, vocabulary_object, min_bias_freq, max_bias_freq):
+        super(DoubleBiasFreqVocabulary, self).__init__(vocabulary_object)
+        self.min_bias_freq = min_bias_freq
+        self.max_bias_freq = max_bias_freq
+
+    def get_fdist_selected(self):
+        
+        # Load the full vocabulary
+        old_fdist_selected = \
+        super(BiasFreqVocabulary, self).get_fdist_selected()
+
+        # Filter the target terms according to double bias. Using min and max.
+        new_vocabulary_selected = \
+        [token
+         for token in old_fdist_selected.keys_sorted()
+         if old_fdist_selected[token] >= self.min_bias_freq and old_fdist_selected[token] <= self.max_bias_freq]
+
+        new_fdist_selected = FreqDistExt()
+        for token in new_vocabulary_selected:
+            new_fdist_selected[token] = old_fdist_selected[token]
+
+        return new_fdist_selected
          
     
     

@@ -51,7 +51,8 @@ class EnumFiltersVocabulary(object):
      PERCENTAGE_RAND,
      TRANSPARENT,
      SPECIFIC_TOKENS,
-     REMOVE_SPECIFIC_TOKENS) = range(8)
+     REMOVE_SPECIFIC_TOKENS,
+     DOUBLE_BIAS_FREQ) = range(9)
 
 
 class FactoryFilterVocabulary(object):
@@ -109,6 +110,9 @@ class FactorySimpleFilterVocabulary(FactoryFilterVocabulary):
             json_of_specific_tokens.close()
             
             return RemoveSpecificTokensVocabulary(vocabulary_object, list_specific_tokens, validated)
+
+        if option == EnumFiltersVocabulary.DOUBLE_BIAS_FREQ:
+            return DoubleBiasFreqVocabulary(vocabulary_object, kwargs["min_bias_freq"], kwargs["max_bias_freq"])
         
         
 class EnumFiltersTermsList(object):

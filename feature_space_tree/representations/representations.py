@@ -52,6 +52,8 @@ from sklearn.cluster import KMeans
 from sklearn.externals import joblib
 from sklearn import mixture
 from sklearn.neighbors import DistanceMetric
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn import metrics
 
 from abc import ABCMeta, abstractmethod
 
@@ -63,7 +65,7 @@ from nltk.corpus.util import LazyCorpusLoader
 from ..attributes.attr_config import FactoryTermLex
 from ..attributes import virtuals
 from _pyio import __metaclass__
-from aptsources.distinfo import Template
+#from aptsources.distinfo import Template
 from boto.ec2.cloudwatch.dimension import Dimension
 from gensim.models.word2vec import Word2Vec
 from gensim.matutils import Dense2Corpus
@@ -3029,7 +3031,12 @@ class FactorySimpleDecoratorMatrixHolder(FactoryDecoratorMatrixHolder):
                 pc = kwargs["precomputed_dict"]
             else:
                 pc = "NO_PRECOMPUTED"
-            return FactoryFixedDistances2CTDecoratorMatrixHolder(k_centers=kwargs["k_centers"], precomputed_dict=pc);
+                
+            if "distance" in kwargs:
+                dist = kwargs["distance"]
+            else:
+                dist = "euclidean"
+            return FactoryFixedDistances2CTDecoratorMatrixHolder(k_centers=kwargs["k_centers"], precomputed_dict=pc, distance=dist);
         
         if option == EnumDecoratorsMatrixHolder.FIXED_DISTANCES_TO_CLUSTER_DOCS:
             if "precomputed_dict" in kwargs:
@@ -3161,18 +3168,19 @@ class FactoryNormalizedProbsDecoratorMatrixHolder(AbstractFactoryDecoratorMatrix
     
 class FactoryFixedDistances2CTDecoratorMatrixHolder(AbstractFactoryDecoratorMatrixHolder):
     
-    def __init__(self, k_centers=300, precomputed_dict="NO_PRECOMPUTED"):
+    def __init__(self, k_centers=300, precomputed_dict="NO_PRECOMPUTED", distance="euclidean"):
         self.k_centers = k_centers
         self.precomputed_dict = precomputed_dict
+        self.distance = distance
 
     def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
         return FixedDistances2CTAttributeHeader(fdist, vocabulary, concepts)
 
     def create_matrix_train_holder(self, matrix_holder, space):        
-        return FixedDistances2CTTrainMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict)
+        return FixedDistances2CTTrainMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict, self.distance)
 
     def create_matrix_test_holder(self, matrix_holder, space):
-        return FixedDistances2CTTestMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict)
+        return FixedDistances2CTTestMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict, self.distance)
     
     def save_train_data(self, space):
         pass
@@ -3311,6 +3319,7 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
         #self.term_matrix = term_matrix
         self.__clusterer = None
         self._precomputed_dict=precomputed_dict
+        self._matrix = None
         
     def get_k_centers(self):
         return self.__k
@@ -3377,6 +3386,15 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
             id2word[u] = term
             word2prediction[term] = clusterer.predict(mat_terms[unorder_dict_index[term], :])
         ###############################################################    
+        
+        centroids = clusterer.cluster_centers_
+        dist = DistanceMetric.get_metric('euclidean')
+        print self.get_matrix()
+        print "-------------------------------"
+        print centroids
+        matrix_docs_dist_prot = metrics.pairwise.rbf_kernel(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids) 
+        print "=========================================="
+        print matrix_docs_dist_prot
         
         corpus_bow = []    
         corpus_bow_prot = []
@@ -3483,6 +3501,8 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
         
         #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
         #corpus_lsi = lsi[corpus_tfidf]
+        
+        matrix_docs_prot = matrix_docs_prot * matrix_docs_dist_prot
 
         self._matrix = matrix_docs_prot
         self._instance_categories = instance_categories
@@ -3509,7 +3529,11 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
         
     def get_matrix(self):
         #super(FixedQuantizedTrainMatrixHolder, self).get_matrix()
-        return self._matrix 
+        # return self._matrix
+        if self._matrix is not None:
+            return self._matrix
+        else:
+            return super(FixedQuantizedMatrixHolder, self).get_matrix() 
 
     def set_matrix(self, value):
         self._matrix = value
@@ -4038,13 +4062,14 @@ class NormalizedProbsDecoratorTestMatrixHolder(NormalizedProbsDecoratorMatrixHol
                 
 class FixedDistances2CTMatrixHolder(DecoratorMatrixHolder):
     
-    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED"):
+    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED", distance="euclidean"):
         super(FixedDistances2CTMatrixHolder, self).__init__(matrix_holder)
         self.__k = k
         #self.term_matrix = term_matrix
         self.__clusterer = None
         self._precomputed_dict=precomputed_dict
         self._matrix = None
+        self._distance=distance
         
     def get_k_centers(self):
         return self.__k
@@ -4060,6 +4085,7 @@ class FixedDistances2CTMatrixHolder(DecoratorMatrixHolder):
             clusterer = KMeans(n_clusters=k, verbose=1, n_jobs=4)
             clusterer.fit(matrix_terms)
         else:
+            print "The clusterer was precomputed  :)"
             cache_file = self._precomputed_dict        
             clusterer =  joblib.load(cache_file)
             
@@ -4074,7 +4100,7 @@ class FixedDistances2CTMatrixHolder(DecoratorMatrixHolder):
                           mat_terms):
 
         t1 = time.time()
-        print "Starting BOW representation..."
+        print "Starting FixedDistances2CTMatrixHolder representation..."
         
         k_centers = self.__k
         clusterer = self.__clusterer
@@ -4104,22 +4130,38 @@ class FixedDistances2CTMatrixHolder(DecoratorMatrixHolder):
         # SUPER SPEED 
         unorder_dict_index = {}
         id2word = {}
-        word2prediction = {}
+        #word2prediction = {}
         for (term, u) in zip(space._vocabulary, range(len_vocab)):
             unorder_dict_index[term] = u
             id2word[u] = term
-            word2prediction[term] = clusterer.predict(mat_terms[unorder_dict_index[term], :])
+            #word2prediction[term] = clusterer.predict(mat_terms[unorder_dict_index[term], :])
         ###############################################################    
         
         
         centroids = clusterer.cluster_centers_
-        dist = DistanceMetric.get_metric('euclidean')
-        print self.get_matrix()
-        print "-------------------------------"
-        print centroids
-        matrix_docs_prot = dist.pairwise(self.get_matrix(), centroids) 
-        print "=========================================="
-        print matrix_docs_prot
+        # dist = DistanceMetric.get_metric('euclidean')
+        # print self.get_matrix()
+        # print "-------------------------------"
+        # print centroids
+        print "Computing distances/similarity."
+        
+        matrix_docs_prot = None
+        if self._distance == 'euclidean':
+            matrix_docs_prot = metrics.pairwise.euclidean_distances(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids) 
+            #print "=========================================="
+            #print matrix_docs_prot
+        elif self._distance == 'cosine_distance':
+            matrix_docs_prot = metrics.pairwise.cosine_distances(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+        elif self._distance == 'cosine_similarity':
+            matrix_docs_prot = metrics.pairwise.cosine_similarity(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+        elif self._distance == 'rbf':
+            matrix_docs_prot = metrics.pairwise.rbf_kernel(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+        elif self._distance == 'lineal':
+            matrix_docs_prot = metrics.pairwise.linear_kernel(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+        else:
+            print "No distance or similarty measure was indicated."
+            sys.exit()
+        print "End of computing distances/similarity."
                 
         corpus_bow = []    
         i = 0      
@@ -4129,7 +4171,25 @@ class FixedDistances2CTMatrixHolder(DecoratorMatrixHolder):
                 tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
                 docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
                 tamDoc = len(tokens)
-                print "document: ", i
+                
+                # EXTRACODE FOR PRINT THE CORPUS###################################
+#                 shelf = shelve.open("./exp_validacion1024_tc/1_TermSplit_test.dat", protocol=2)
+#                 #print shelf.keys()
+#                 
+#                 
+#                 target_tokens = []
+#                 for tok in tokens:
+#                     target_tokens += [str(word2prediction[tok][0])]
+#                     #print target_tokens[i_tok]
+#                     #(NDARRAY)print type(word2prediction[tok])
+#                     #print word2prediction[tok]                    
+#                 
+#                 shelf[arch.encode('utf8')] = target_tokens
+#                 
+#                 shelf.close()
+                # EXTRACODE FOR PRINT THE CORPUS###################################
+                     
+                #print "document: ", i
                 
                 ################################################################
                 # SUPER SPEED 
@@ -4235,7 +4295,7 @@ class FixedDistances2CTMatrixHolder(DecoratorMatrixHolder):
         #print matConceptosTerm
 
         t2 = time.time()
-        print "End of DOR representation. Time: ", str(t2-t1)
+        print "End of FixedDistances2CTMatrixHolder representation. Time: ", str(t2-t1)
         
     def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
         cache_file = "%s/%s" % (self.get_space().space_path, self.get_space().id_space)        
@@ -4267,8 +4327,8 @@ class FixedDistances2CTMatrixHolder(DecoratorMatrixHolder):
         
 class FixedDistances2CTTrainMatrixHolder(FixedDistances2CTMatrixHolder):
     
-    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED"):
-        super(FixedDistances2CTTrainMatrixHolder, self).__init__(matrix_holder, k, precomputed_dict)
+    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED", distance="euclidean"):
+        super(FixedDistances2CTTrainMatrixHolder, self).__init__(matrix_holder, k, precomputed_dict, distance)
         
     def build_matrix(self):
         #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
@@ -4303,8 +4363,8 @@ class FixedDistances2CTTrainMatrixHolder(FixedDistances2CTMatrixHolder):
     
 class FixedDistances2CTTestMatrixHolder(FixedDistances2CTMatrixHolder):
     
-    def __init__(self, matrix_holder_object, k=300, precomputed_dict="NO_PRECOMPUTED"):
-        super(FixedDistances2CTTestMatrixHolder, self).__init__(matrix_holder_object, k, precomputed_dict)
+    def __init__(self, matrix_holder_object, k=300, precomputed_dict="NO_PRECOMPUTED", distance="euclidean"):
+        super(FixedDistances2CTTestMatrixHolder, self).__init__(matrix_holder_object, k, precomputed_dict, distance)
         
     def build_matrix(self):
         #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
@@ -5256,6 +5316,7 @@ class CSAMatrixHolder(MatrixHolder):
                 tokens = virtual_classes_holder[author].dic_file_tokens[arch]
                 docActualFd = FreqDistExt(tokens) #virtual_classes_holder[author].dic_file_fd[arch]
                 tam_doc = len(tokens)
+                print k,":",tam_doc
 
 ######                if len(tokens) == 0:
 ######                    print "***************************************************"
@@ -5420,6 +5481,7 @@ class CSATrainMatrixHolder(CSAMatrixHolder):
         for author in space.categories:
             archivos = space.virtual_classes_holder_train[author].cat_file_list
             #print author
+            print "cat: ",i
             
             total_terms_in_class = 0
             for arch in archivos:
@@ -6674,7 +6736,7 @@ class BOWMatrixHolder(MatrixHolder):
                 for pal in docActualFd.keys_sorted():
                     
                     if (pal in unorder_dict_index) and tamDoc > 0:
-                        freq = docActualFd[pal] / float(tamDoc)
+                        freq = docActualFd[pal] ##/ float(tamDoc)
                     else:
                         freq = 0.0
                     
@@ -8830,7 +8892,7 @@ class W2VMatrixHolder(MatrixHolder):
                           corpus_file_list):
 
         t1 = time.time()
-        print "Starting BOW representation..."
+        print "Starting W2VMatrixHolder representation..."
         
         dimensions = self.dimensions
         
@@ -8963,7 +9025,7 @@ class W2VMatrixHolder(MatrixHolder):
         #print matConceptosTerm
 
         t2 = time.time()
-        print "End of BOW representation. Time: ", str(t2-t1)
+        print "End of W2VMatrixHolder representation. Time: ", str(t2-t1)
         
     def build_collect_train_sentences(self,
                           space,
@@ -8972,7 +9034,7 @@ class W2VMatrixHolder(MatrixHolder):
 
 
         t1 = time.time()
-        print "Starting BOW representation..."
+        print "Starting build_collect_train_sentences ..."
         
         self._train_sentences = []
         
@@ -8990,8 +9052,8 @@ class W2VMatrixHolder(MatrixHolder):
                                         dtype=numpy.float64)
             dense_flag = False
         else:
-            matrix_docs_terms = numpy.zeros((len(corpus_file_list), len_vocab),
-                                        dtype=numpy.float64)
+            #matrix_docs_terms = numpy.zeros((len(corpus_file_list), len_vocab),
+            #                            dtype=numpy.float64)
             dense_flag = True
         
         instance_categories = []
@@ -9087,7 +9149,7 @@ class W2VMatrixHolder(MatrixHolder):
         #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
         #corpus_lsi = lsi[corpus_tfidf]
 
-        self._matrix = matrix_docs_terms
+        #self._matrix = matrix_docs_terms
         self._instance_categories = instance_categories
         self._instance_namefiles = instance_namefiles
         
@@ -9098,16 +9160,19 @@ class W2VMatrixHolder(MatrixHolder):
         #print matConceptosTerm
 
         t2 = time.time()
-        print "End of BOW representation. Time: ", str(t2-t1)
+        print "End of build_collect_train_sentences Time: ", str(t2-t1)
             
 
 class W2VTrainMatrixHolder(W2VMatrixHolder):
 
     def __init__(self, space, dataset_label="train", train=True):
         super(W2VTrainMatrixHolder, self).__init__(space, w2v=None, dataset_label=dataset_label)
-        self.build_collect_train_sentences(self.space, 
-                                           self.space.virtual_classes_holder_train,
-                                           self.space.corpus_file_list_train)
+        
+        if self._w2v_txt == "NOT_PROVIDED":
+            self.build_collect_train_sentences(self.space, 
+                                               self.space.virtual_classes_holder_train,
+                                               self.space.corpus_file_list_train)
+            
             
         if train == True:
             self.train_w2v(self._train_sentences)
@@ -9122,7 +9187,9 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
                                          min_count=self.min_count, 
                                          workers=self.workers)
         else:
-            self._train_model = Word2Vec.load_word2vec_format(self._w2v_txt, binary=False)   
+            print "Loading w2v file model ..."
+            self._train_model = Word2Vec.load_word2vec_format(self._w2v_txt, binary=False)
+            print "End of loading w2v file model ..."   
         
     def build_matrix(self):                
         self.build_naive_representation(self.space,

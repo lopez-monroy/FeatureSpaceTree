@@ -148,6 +148,11 @@ def main_function():
                         action='store_true',
                         help='Do not print all log files.')
     
+    parser.add_argument('--logcorpus',
+                        dest='logcorpus',
+                        action='store_true',
+                        help='Writes a text representations of the corpus.dat objects.')
+    
     args = parser.parse_args()
     
     print "********************************************************************"
@@ -283,8 +288,10 @@ def main_function():
         print "================================================\n\n"
     #===========================================================================
 
-    # corpora = representations.Corpora(config_base.experiment_base_path)
-    # corpora.generate()
+    if args.logcorpus:
+        
+        corpora = representations.Corpora(config_base.experiment_base_path)
+        corpora.generate()
 
     #===========================================================================
     # Writes a general report
