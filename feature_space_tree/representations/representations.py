@@ -1634,7 +1634,8 @@ class EnumRepresentation(object):
      VW2V,
      SOA2,
      TFIDF,
-     W2VVLAD) = range(10)
+     W2VVLAD,
+     TCOR) = range(11)
 
 class AttributeHeader(object):
 
@@ -1698,6 +1699,19 @@ class AttributeHeaderDOR(AttributeHeader):
         self.__str_concepts = []        
         for e in range(len(self._concepts)):
             self.__str_concepts += ["document_" + str(e)]
+            
+        return self.__str_concepts
+    
+    
+class AttributeHeaderTCOR(AttributeHeader):
+
+    def __init_(self, fdist, vocabulary, concepts):
+        super(AttributeHeaderTCOR, self).__init__(fdist, vocabulary, concepts)
+
+    def get_attributes(self):
+        self.__str_concepts = []        
+        for e in range(len(self._concepts)):
+            self.__str_concepts += ["cooccur_" + str(e)]
             
         return self.__str_concepts
     
@@ -1921,6 +1935,9 @@ class FactorySimpleRepresentation(FactoryRepresentation):
         
         if option == EnumRepresentation.W2VVLAD:
             return FactoryW2VVLADRepresentation()
+        
+        if option == EnumRepresentation.TCOR:
+            return FactoryTCORRepresentation()
 
 
 class AbstractFactoryRepresentation(object):
@@ -2786,7 +2803,155 @@ class FactoryDORRepresentation(AbstractFactoryRepresentation):
 #         self.__dor_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
 #         self.__dor_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
 #         
-#         return self.__dor_train_matrix_holder    
+#         return self.__dor_train_matrix_holder   
+
+
+class FactoryTCORRepresentation(AbstractFactoryRepresentation):
+
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):   
+        
+        self.__tcor_attribute_header = AttributeHeaderTCOR(fdist, vocabulary, vocabulary)
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__tcor_attribute_header = Util.decorate_attribute_header(self.__tcor_attribute_header,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'])
+        # Decorating --------------------------------------------------      
+           
+        return self.__tcor_attribute_header
+
+    def create_matrix_train_holder(self, space):  
+        
+        # Basic initialization ----------------------------------------      
+        self.__tcor_train_matrix_holder = TCORTrainMatrixHolder(space, 
+                                                              dataset_label="train")
+        self.__tcor_train_matrix_holder.build_bowcorpus_id2word(space, 
+                                                               space.virtual_classes_holder_train, 
+                                                               space.corpus_file_list_train)
+        # Basic initialization ----------------------------------------
+        
+        # Decorating --------------------------------------------------
+        print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__tcor_train_matrix_holder = Util.decorate_matrix_holder(self.__tcor_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        # Post initialization of what exactly the TEST object will need!.
+        # The exact shared resource that the test_matrix_holder needs is CONTAINED in the 
+        # last DECORATED version of the train_matrix_holder.
+        self.__tcor_train_matrix_holder.build_matrix()
+        # -------------------------------------------------------------        
+        return self.__tcor_train_matrix_holder 
+
+    def create_matrix_test_holder(self,space):
+        #self.__dor_test_matrix_holder = DORTestMatrixHolder(space, self.__dor_train_matrix_holder.get_id2word(), self.__dor_train_matrix_holder.get_tfidf(), self.__dor_train_matrix_holder.get_lsa(), "test")
+        #self.__dor_test_matrix_holder.set_mat_docs_terms(self.__dor_train_matrix_holder.get_mat_docs_terms())
+        
+        # These are the base initialization. Methods like set_matrix_terms, never should be overwriten by decorators
+        
+        # Basic initialization ----------------------------------------
+        self.__tcor_test_matrix_holder = TCORTestMatrixHolder(space, 
+                                                            train_matrix_holder=self.__tcor_train_matrix_holder,
+                                                            dataset_label="test")
+        #self.__dor_test_matrix_holder.set_matrix_terms(self.__dor_train_matrix_holder.get_matrix_terms())
+        # Basic initialization ----------------------------------------
+                
+        #self.__dor_test_matrix_holder.set_shared_resource(self.__dor_train_matrix_holder.get_shared_resource())
+        
+        # Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__tcor_test_matrix_holder = Util.decorate_matrix_holder(self.__tcor_test_matrix_holder,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'],
+                                                                        "test")
+        # Decorating --------------------------------------------------
+        
+        # Post initialization of what exactly the TEST object will need!.
+        # The exact shared resource that the test_matrix_holder needs is CONTAINED in the 
+        # last DECORATED version of the train_matrix_holder.
+        # self.__dor_test_matrix_holder.set_shared_resource(self.__dor_train_matrix_holder.get_shared_resource())
+        self.__tcor_test_matrix_holder.build_matrix() 
+        # -------------------------------------------------------------
+        return self.__tcor_test_matrix_holder
+    
+    def save_train_data(self, space):
+        
+        if self.__tcor_train_matrix_holder is not None:
+            self.__tcor_train_matrix_holder.save_train_data(space)
+        else:
+            print "ERROR DOR: There is not a train matrix terms concepts built"
+        
+#         
+#         if self.__dor_train_matrix_holder is not None:
+#             cache_file = "%s/%s" % (space.space_path, space.id_space)
+#             
+#             #numpy.save(cache_file + "_mat_terms_concepts.npy", 
+#             #           self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
+#             
+#             id2word = self.__dor_train_matrix_holder.get_id2word()            
+#             with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'w') as outfile:
+#                 json.dump(id2word, outfile)  
+#                           
+#             #tfidf = self.__dor_train_matrix_holder.get_tfidf()
+#             #tfidf.save(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")
+#             
+#             #dor = self.__dor_train_matrix_holder.get_dor()
+#             #dor.save(space.space_path + "/dor/" + space.id_space + "_model.dor") # same for tfidf, lda, ...
+#             
+#             
+#             numpy.save(cache_file + "_mat_docs_docs.npy", 
+#                        self.__dor_train_matrix_holder.get_matrix())
+#             
+#             numpy.save(cache_file + "_mat_docs_terms.npy", 
+#                        self.__dor_train_matrix_holder.get_mat_docs_terms())
+#             
+#             numpy.save(cache_file + "_instance_namefiles.npy", 
+#                        self.__dor_train_matrix_holder.get_instance_namefiles())
+#             
+#             numpy.save(cache_file + "_instance_categories.npy", 
+#                        self.__dor_train_matrix_holder.get_instance_categories())
+#         else:
+#             print "ERROR LSA: There is not a train matrix terms concepts built"
+
+    def load_train_data(self, space):
+        self.__tcor_train_matrix_holder = TCORTrainMatrixHolder(space, dataset_label="train")
+        
+        # Decorating --------------------------------------------------
+        print space.kwargs_space
+        if 'decorators_matrix' in space.kwargs_space:  
+            self.__tcor_train_matrix_holder = Util.decorate_matrix_holder(self.__tcor_train_matrix_holder,
+                                                                     space, 
+                                                                     space.kwargs_space['decorators_matrix'],
+                                                                     "train")
+        # Decorating --------------------------------------------------
+        
+        self.__tcor_train_matrix_holder =  self.__tcor_train_matrix_holder.load_train_data(space)
+        return self.__tcor_train_matrix_holder
+        
+#         cache_file = "%s/%s" % (space.space_path, space.id_space)
+#         
+#         self.__dor_train_matrix_holder = DORTrainMatrixHolder(space)
+#         
+#         with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'r') as infile:
+#                 id2word = json.load(infile)       
+#         #tfidf = models.TfidfModel.load(space.space_path + "/dor/" + space.id_space + "_model.tfidf")      
+#         #dor = models.LsiModel.load(space.space_path + "/dor/" + space.id_space + "_model.dor")    
+#         
+#         self.__dor_train_matrix_holder.set_id2word(id2word)
+#         #self.__dor_train_matrix_holder.set_tfidf(tfidf)
+#         #self.__dor_train_matrix_holder.set_dor(dor)
+#           
+#         #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+#         self.__dor_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_docs.npy"))
+#         self.__dor_train_matrix_holder.set_mat_docs_terms(numpy.load(cache_file + "_mat_docs_terms.npy"))
+#         self.__dor_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+#         self.__dor_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+#         
+#         return self.__dor_train_matrix_holder 
 
 
 class FactoryLDARepresentation(AbstractFactoryRepresentation):
@@ -8183,7 +8348,7 @@ class DORMatrixHolder(MatrixHolder):
                 for pal in docActualFd.keys_sorted():
                     
                     if (pal in unorder_dict_index) and tamDoc > 0:
-                        freq = docActualFd[pal] #/ float(tamDoc)
+                        freq = docActualFd[pal] / float(tamDoc)
                     else:
                         freq = 0.0
                     
@@ -8204,7 +8369,7 @@ class DORMatrixHolder(MatrixHolder):
                         
                         #print "##########################MAT_DOCS_DOCS: " + str(len(matrix_docs_docs[i, :]))
                         
-                        matrix_docs_docs[i, :] += mat_docs_terms[:, unorder_dict_index[pal]] #/ tamDoc
+                        matrix_docs_docs[i, :] += mat_docs_terms[:, unorder_dict_index[pal]] * freq #/tamDoc
                         
                         
                     
@@ -8491,7 +8656,582 @@ class DORTestMatrixHolder(DORMatrixHolder):
     def load_train_data(self, space):
         pass
     
-########### DOR ############       
+########### DOR ############   
+
+########### TCOR ############
+
+class TCORMatrixHolder(MatrixHolder):
+
+    def __init__(self, space, id2word=None, tfidf=None, lsa=None, dataset_label="???"):
+        super(TCORMatrixHolder, self).__init__()
+        self.space = space
+        self.bow_corpus = None
+        self.id2word = id2word
+        self.tfidf = tfidf
+        self.lsa = lsa
+        self.corpus_tfidf = None
+        self.corpus_lsa = None    
+        self._id_dataset = dataset_label
+        
+    def get_tfidf(self):
+        return self.tfidf
+    
+    def get_id2word(self):
+        return self.id2word    
+    
+    def get_lsa(self):
+        return self.lsa
+    
+    def set_tfidf(self, tfidf):
+        self.tfidf = tfidf
+    
+    def set_id2word(self, id2word):
+        self.id2word = id2word    
+    
+    def set_lsa(self, lsa):
+        self.lsa = lsa
+        
+    def set_mat_docs_terms(self, mat):
+        self._mat_docs_terms = mat
+        
+    def get_mat_terms_terms(self):
+        return self._mat_terms_terms
+    
+        
+    def build_bowcorpus_id2word(self,
+                          space,
+                          virtual_classes_holder,
+                          corpus_file_list):
+
+        t1 = time.time()
+        print "Starting BOW representation..."
+        
+        len_vocab = len(space._vocabulary)
+
+        Util.create_a_dir(space.space_path + "/sparse")
+        rows_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "rows_sparse.txt", "w")
+        columns_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "columns_sparse.txt", "w")
+        vals_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "vals_sparce.txt", "w")
+        
+        dense_flag = True
+        
+        if ('sparse' in space.kwargs_space) and space.kwargs_space['sparse']:            
+            matrix_terms_terms = numpy.zeros((1, 1),
+                                        dtype=numpy.float64)
+            dense_flag = False
+        else:
+            matrix_terms_terms = numpy.zeros((len_vocab, len_vocab),
+                                        dtype=numpy.float64)
+            dense_flag = True
+        
+        instance_categories = []
+        instance_namefiles = []
+        
+        ################################################################
+        # SUPER SPEED 
+        unorder_dict_index = {}
+        id2word = {}
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+            id2word[u] = term
+        ###############################################################    
+        
+        corpus_bow = []    
+        i = 0      
+        for autor in space.categories:
+            archivos = virtual_classes_holder[autor].cat_file_list
+            for arch in archivos:
+                tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
+                tamDoc = len(tokens)
+                
+                tam_V=len(unorder_dict_index)
+                tam_v=len(docActualFd)
+                print "tam_V: " + str(tam_V)
+                print "tam_v: " + str(tam_v)
+                
+                ################################################################
+                # SUPER SPEED 
+                bow = []
+                for pal in docActualFd.keys_sorted():
+                    
+                    if (pal in unorder_dict_index) and tamDoc > 0:
+                        freq = docActualFd[pal] #/ float(tamDoc)
+                    else:
+                        freq = 0.0
+                    
+                    if dense_flag:
+                        bow += [(unorder_dict_index[pal], freq)]
+                        # matrix_terms_terms[i, unorder_dict_index[pal]] = (1 + math.log10(freq)) * math.log10(tam_V/tam_v)
+                    
+                    if freq > 0.0:
+                        rows_file.write(str(i) + "\n")
+                        columns_file.write(str(unorder_dict_index[pal]) + "\n")
+                        vals_file.write(str(freq) + "\n")
+                        
+                # populate the coocurrences with other terms
+                for w1 in set(docActualFd.keys_sorted()):
+                    
+                    for w2 in set(docActualFd.keys_sorted()) - set([w1]):
+                        
+                        matrix_terms_terms[unorder_dict_index[w2], unorder_dict_index[w1]] += 1.0
+                        
+                # populate the coocurrences with itself
+                for w1 in set(docActualFd.keys_sorted()):
+                    
+                    if docActualFd[w1] >= 2:
+                        matrix_terms_terms[unorder_dict_index[w1], unorder_dict_index[w1]] += 1.0
+                    
+                ################################################################
+
+                ################################################################
+                # VERY SLOW
+#                j = 0
+#                for pal in space._vocabulary:
+#                        
+#                    if (pal in docActualFd) and tamDoc > 0:
+#                        #print str(freq) + " antes"
+#                        freq = docActualFd[pal] / float(tamDoc) #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
+##                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
+##                        freq = math.log((1 + docActual.diccionario[pal] / (float(docActual.tamDoc))), 2)
+#                        #print str(freq) + " despues"
+#                        # uncomment the following line if you want a boolean weigh :)
+#                        # freq=1.0
+#                        #if pal == "xico":
+#                        #    print pal +"where found in: "  +arch
+#                    else:
+#                        freq = 0
+##                    terminos[j] += freq
+#                    matrix_docs_terms[i,j] = freq
+#
+#                    j += 1
+                    ############################################################
+
+                i+=1
+                
+                instance_categories += [autor]
+                instance_namefiles += [arch]
+                
+                corpus_bow += [bow]
+                
+        TK = []
+        for tw in range(tam_V):
+            TK += [(len(numpy.where(matrix_terms_terms[:,unorder_dict_index[id2word[tw]]] > 0)) * math.pow(tam_V, -1))]
+            
+        TKa = numpy.array(TK) 
+                
+        matrix_terms_terms[numpy.where(matrix_terms_terms > 0)] = (numpy.log10(matrix_terms_terms[numpy.where(matrix_terms_terms > 0)]) + 1)  
+                
+        matrix_terms_terms = matrix_terms_terms * TKa
+        
+        Util.create_a_dir(space.space_path + "/dor")
+        
+        #print corpus_bow
+            
+        #corpora.MmCorpus.serialize(space.space_path + "/dor/" + space.id_space + "_" + self._id_dataset + "_corpus.mm", corpus_bow)
+        #self.corpus_bow = corpora.MmCorpus(space.space_path + "/dor/" + space.id_space + "_" + self._id_dataset + "_corpus.mm") # load a corpus of nine documents, from the Tutorials
+        
+        #print self.corpus_bow
+        
+        self.id2word = id2word
+        
+        #self.tfidf = models.TfidfModel(corpus) # step 1 -- initialize a model
+        
+        #corpus_tfidf = tfidf[corpus]
+        
+        #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
+        #corpus_lsi = lsi[corpus_tfidf]
+        
+        print "------"
+        print matrix_terms_terms
+        print "------"
+        
+        #matrix_docs_terms=matrix_docs_terms ** 2 # matrix_docs_terms
+        norma=numpy.sqrt( ( matrix_terms_terms ** 2 ).sum(axis=0) ) # sum all columns
+        norma+=0.00000001
+        matrix_terms_terms=matrix_terms_terms/norma
+        
+        print "+++++"
+        print matrix_terms_terms
+        print "+++++"
+        
+        self._mat_terms_terms = matrix_terms_terms
+        self._instance_categories = instance_categories
+        self._instance_namefiles = instance_namefiles
+        
+        rows_file.close()
+        columns_file.close()
+        vals_file.close()
+
+        #print matConceptosTerm
+
+        t2 = time.time()
+        print "End of BOW representation. Time: ", str(t2-t1)
+        
+        
+    def build_matrix_dor(self,
+                          space,
+                          virtual_classes_holder,
+                          corpus_file_list,
+                          mat_docs_terms):
+
+        t1 = time.time()
+        print "Starting BOW representation..."
+        
+        len_vocab = len(space._vocabulary)
+
+        Util.create_a_dir(space.space_path + "/sparse")
+        rows_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "rows_sparse.txt", "w")
+        columns_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "columns_sparse.txt", "w")
+        vals_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "vals_sparce.txt", "w")
+        
+        dense_flag = True
+        
+        if ('sparse' in space.kwargs_space) and space.kwargs_space['sparse']:            
+            matrix_docs_docs = numpy.zeros((1, 1),
+                                        dtype=numpy.float64)
+            dense_flag = False
+        else:
+            matrix_docs_docs = numpy.zeros((len(corpus_file_list), len(mat_docs_terms)),
+                                        dtype=numpy.float64)
+            dense_flag = True
+        
+        instance_categories = []
+        instance_namefiles = []
+        
+        ################################################################
+        # SUPER SPEED 
+        unorder_dict_index = {}
+        id2word = {}
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+            id2word[u] = term
+        ###############################################################    
+        
+        corpus_bow = []    
+        i = 0      
+        for autor in space.categories:
+            archivos = virtual_classes_holder[autor].cat_file_list
+            for arch in archivos:
+                tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
+                tamDoc = len(tokens)
+                
+                ################################################################
+                # SUPER SPEED 
+                bow = []
+                for pal in docActualFd.keys_sorted():
+                    
+                    if (pal in unorder_dict_index) and tamDoc > 0:
+                        freq = docActualFd[pal] / float(tamDoc)
+                    else:
+                        freq = 0.0
+                    
+                    if dense_flag:
+                        bow += [(unorder_dict_index[pal], freq)]
+                        
+                        
+                        #print matrix_docs_docs
+                        
+                        #print "##########################" + str(len(mat_docs_terms))
+                        
+                        #print mat_docs_terms
+                        
+                        #print unorder_dict_index[pal]
+                        
+                        #print "##########################MAT_DOCS_TERMS: " + str(len(mat_docs_terms[:, unorder_dict_index[pal]]))
+                        #print "##########################MAT_DOCS_TERMS_T: " + str(len((mat_docs_terms[:, unorder_dict_index[pal]].transpose()), axis=1))
+                        
+                        #print "##########################MAT_DOCS_DOCS: " + str(len(matrix_docs_docs[i, :]))
+                        
+                        matrix_docs_docs[i, :] += mat_docs_terms[:, unorder_dict_index[pal]] * freq #/ tamDoc
+                        
+                        
+                    
+                    if freq > 0.0:
+                        rows_file.write(str(i) + "\n")
+                        columns_file.write(str(unorder_dict_index[pal]) + "\n")
+                        vals_file.write(str(freq) + "\n")
+                    
+                ################################################################
+
+                ################################################################
+                # VERY SLOW
+#                j = 0
+#                for pal in space._vocabulary:
+#                        
+#                    if (pal in docActualFd) and tamDoc > 0:
+#                        #print str(freq) + " antes"
+#                        freq = docActualFd[pal] / float(tamDoc) #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
+##                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
+##                        freq = math.log((1 + docActual.diccionario[pal] / (float(docActual.tamDoc))), 2)
+#                        #print str(freq) + " despues"
+#                        # uncomment the following line if you want a boolean weigh :)
+#                        # freq=1.0
+#                        #if pal == "xico":
+#                        #    print pal +"where found in: "  +arch
+#                    else:
+#                        freq = 0
+##                    terminos[j] += freq
+#                    matrix_docs_terms[i,j] = freq
+#
+#                    j += 1
+                    ############################################################
+
+                i+=1
+                
+                instance_categories += [autor]
+                instance_namefiles += [arch]
+                
+                corpus_bow += [bow]
+            
+        #Util.create_a_dir(space.space_path + "/dor")
+        
+        #print corpus_bow
+            
+        #corpora.MmCorpus.serialize(space.space_path + "/dor/" + space.id_space + "_" + self._id_dataset + "_corpus.mm", corpus_bow)
+        #self.corpus_bow = corpora.MmCorpus(space.space_path + "/dor/" + space.id_space + "_" + self._id_dataset + "_corpus.mm") # load a corpus of nine documents, from the Tutorials
+        
+        #print self.corpus_bow
+        
+        self.id2word = id2word
+        
+        #self.tfidf = models.TfidfModel(corpus) # step 1 -- initialize a model
+        
+        #corpus_tfidf = tfidf[corpus]
+        
+        #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
+        #corpus_lsi = lsi[corpus_tfidf]
+
+        self._matrix = matrix_docs_docs
+        self._instance_categories = instance_categories
+        self._instance_namefiles = instance_namefiles
+        
+        rows_file.close()
+        columns_file.close()
+        vals_file.close()
+
+        #print matConceptosTerm
+
+        t2 = time.time()
+        print "End of DOR representation. Time: ", str(t2-t1)
+        
+        
+            
+    def build_weight(self,
+                     space,
+                     virtual_classes_holder,
+                     corpus_file_list):
+
+        weighted_matrix_docs_terms = None
+
+        #some code
+
+        return weighted_matrix_docs_terms
+
+    def build_lsi(self):
+        final_matrix_lsi = None
+
+        # some code
+
+        self._matrix = final_matrix_lsi
+
+class TCORTrainMatrixHolder(TCORMatrixHolder):
+
+    def __init__(self, space, id2word=None, tfidf=None, lsa=None, dataset_label="train"):
+        super(TCORTrainMatrixHolder, self).__init__(space, id2word, tfidf, lsa, dataset_label)
+        #self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_train, self.space.corpus_file_list_train)
+        #self._id_dataset="train"
+        
+    
+    def build_matrix(self):
+        self.build_matrix_dor(self.space,
+                                             self.space.virtual_classes_holder_train,
+                                             self.space.corpus_file_list_train,
+                                             self._mat_terms_terms)
+        
+        
+                                
+
+    def normalize_matrix(self):
+        pass   
+        
+# 
+#     def build_matrix(self):
+#         matrix_docs_terms = self.build_matrix_doc_terminos(self.space,
+#                                        self.space.virtual_classes_holder_train,
+#                                        self.space.corpus_file_list_train)
+# 
+#         weighted_matrix_docs_terms = self.build_weight(self.space,
+#                                                        self.space.virtual_classes_holder_train,
+#                                                        self.space.corpus_file_list_train,
+#                                                        matrix_docs_terms)
+#         self.build_lsi(self.space,
+#                        self.space.virtual_classes_holder_train,
+#                        self.space.corpus_file_list_train,
+#                        weighted_matrix_docs_terms)
+
+    def get_matrix(self):
+        return self._matrix
+    
+    def get_instance_categories(self):
+        return self._instance_categories
+    
+    def get_instance_namefiles(self):
+        return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
+        
+    # ------------------------------------------------------
+        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        return numpy.transpose(self._mat_terms_terms)
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        self._mat_terms_terms = numpy.transpose(value)
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    def save_train_data(self, space):
+        
+        if self is not None:
+            cache_file = "%s/%s" % (space.space_path, space.id_space)
+            
+            #numpy.save(cache_file + "_mat_terms_concepts.npy", 
+            #           self.__lsa_train_matrix_holder.get_matrix_terms_concepts())
+            
+            id2word = self.get_id2word()            
+            with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'w') as outfile:
+                json.dump(id2word, outfile)  
+                          
+            #tfidf = self.__dor_train_matrix_holder.get_tfidf()
+            #tfidf.save(space.space_path + "/lsa/" + space.id_space + "_model.tfidf")
+            
+            #dor = self.__dor_train_matrix_holder.get_dor()
+            #dor.save(space.space_path + "/dor/" + space.id_space + "_model.dor") # same for tfidf, lda, ...
+            
+            
+            numpy.save(cache_file + "_mat_docs_docs.npy", 
+                       self.get_matrix())
+            
+            numpy.save(cache_file + "_mat_terms_terms.npy", 
+                       self.get_mat_terms_terms())
+            
+            numpy.save(cache_file + "_instance_namefiles.npy", 
+                       self.get_instance_namefiles())
+            
+            numpy.save(cache_file + "_instance_categories.npy", 
+                       self.get_instance_categories())
+        else:
+            print "ERROR LSA: There is not a train matrix terms concepts built"
+
+    def load_train_data(self, space):
+        cache_file = "%s/%s" % (space.space_path, space.id_space)
+        
+        dor_train_matrix_holder = DORTrainMatrixHolder(space)
+        
+        with open(space.space_path + "/dor/" + space.id_space + "_id2word.txt", 'r') as infile:
+                id2word = json.load(infile)       
+        #tfidf = models.TfidfModel.load(space.space_path + "/dor/" + space.id_space + "_model.tfidf")      
+        #dor = models.LsiModel.load(space.space_path + "/dor/" + space.id_space + "_model.dor")    
+        
+        dor_train_matrix_holder.set_id2word(id2word)
+        #self.__dor_train_matrix_holder.set_tfidf(tfidf)
+        #self.__dor_train_matrix_holder.set_dor(dor)
+          
+        #self.__lsa_train_matrix_holder.set_matrix_terms_concepts(numpy.load(cache_file + "_mat_terms_concepts.npy"))  
+        dor_train_matrix_holder.set_matrix(numpy.load(cache_file + "_mat_docs_docs.npy"))
+        dor_train_matrix_holder.set_mat_docs_terms(numpy.load(cache_file + "_mat_terms_terms.npy"))
+        dor_train_matrix_holder.set_instance_namefiles(numpy.load(cache_file + "_instance_namefiles.npy"))
+        dor_train_matrix_holder.set_instance_categories(numpy.load(cache_file + "_instance_categories.npy"))      
+        
+        return dor_train_matrix_holder  
+        
+
+
+
+class TCORTestMatrixHolder(TCORMatrixHolder):
+
+    def __init__(self, space, id2word=None, tfidf=None, lsa=None, train_matrix_holder=None, dataset_label="test"):
+        super(TCORTestMatrixHolder, self).__init__(space, id2word, tfidf, lsa, dataset_label)
+        self.set_matrix_terms(train_matrix_holder.get_matrix_terms())
+        #self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_test, self.space.corpus_file_list_test)
+        #self._id_dataset="test"
+        
+        
+    def build_matrix(self):
+        self.build_matrix_dor(self.space,
+                                             self.space.virtual_classes_holder_test,
+                                             self.space.corpus_file_list_test,
+                                             self._mat_terms_terms) 
+
+    def normalize_matrix(self):
+        pass
+
+#     def build_matrix(self):
+#         matrix_docs_terms = self.build_matrix_doc_terminos(self.space,
+#                                        self.space.virtual_classes_holder_test,
+#                                        self.space.corpus_file_list_test)
+# 
+#         weighted_matrix_docs_terms = self.build_weight(self.space,
+#                                                        self.space.virtual_classes_holder_test,
+#                                                        self.space.corpus_file_list_test,
+#                                                        matrix_docs_terms)
+#         self.build_lsi(self.space,
+#                        self.space.virtual_classes_holder_test,
+#                        self.space.corpus_file_list_test,
+#                        weighted_matrix_docs_terms)
+
+    def get_matrix(self):
+        return self._matrix
+    
+    def get_instance_categories(self):
+        return self._instance_categories
+    
+    def get_instance_namefiles(self):
+        return self._instance_namefiles
+    
+    def set_matrix(self, value):
+        self._matrix = value
+    
+    def set_instance_categories(self, value):
+        self._instance_categories = value
+    
+    def set_instance_namefiles(self, value):
+        self._instance_namefiles = value
+        
+    # ------------------------------------------------------------------------    
+        
+    def get_matrix_terms(self):    # return some useful information for Decorators e.g. term matrix
+        return numpy.transpose(self._mat_docs_terms)
+    
+    def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
+        self._mat_docs_terms = numpy.transpose(value)
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        pass
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        pass
+    
+    def save_train_data(self, space):
+        pass
+
+    def load_train_data(self, space):
+        pass
+    
+########### TCOR ############        
       
 class LDAMatrixHolder(MatrixHolder):
 
