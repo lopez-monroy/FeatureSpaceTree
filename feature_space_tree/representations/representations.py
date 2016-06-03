@@ -8772,15 +8772,15 @@ class TCORMatrixHolder(MatrixHolder):
                 # populate the coocurrences with other terms
                 for w1 in set(docActualFd.keys_sorted()):
                     
-                    for w2 in set(docActualFd.keys_sorted()) - set([w1]):
+                    for w2 in set(docActualFd.keys_sorted()):
                         
                         matrix_terms_terms[unorder_dict_index[w2], unorder_dict_index[w1]] += 1.0
                         
                 # populate the coocurrences with itself
-                for w1 in set(docActualFd.keys_sorted()):
+                #for w1 in set(docActualFd.keys_sorted()):
                     
-                    if docActualFd[w1] >= 2:
-                        matrix_terms_terms[unorder_dict_index[w1], unorder_dict_index[w1]] += 1.0
+                #    if docActualFd[w1] >= 2:
+                #        matrix_terms_terms[unorder_dict_index[w1], unorder_dict_index[w1]] += 1.0
                     
                 ################################################################
 
@@ -8814,15 +8814,32 @@ class TCORMatrixHolder(MatrixHolder):
                 
                 corpus_bow += [bow]
                 
+        numpy.set_printoptions(precision=3)
+        print matrix_terms_terms
         TK = []
         for tw in range(tam_V):
-            TK += [(len(numpy.where(matrix_terms_terms[:,unorder_dict_index[id2word[tw]]] > 0)) * math.pow(tam_V, -1))]
+            print "term: ",tw
+            print tam_V
+            print float(numpy.size(numpy.where(matrix_terms_terms[tw,:] > 0), axis=1))
+            TK += [tam_V/float(numpy.size(numpy.where(matrix_terms_terms[tw,:] > 0), axis=1))]
             
         TKa = numpy.array(TK) 
+        
+        print "TKa"
+        print TKa
+        
+        print "numpy.log10(TKa)"
+        print numpy.log10(TKa)
                 
-        matrix_terms_terms[numpy.where(matrix_terms_terms > 0)] = (numpy.log10(matrix_terms_terms[numpy.where(matrix_terms_terms > 0)]) + 1)  
-                
-        matrix_terms_terms = matrix_terms_terms * TKa
+        matrix_terms_terms[numpy.where(matrix_terms_terms > 0)] = (1 + numpy.log10(matrix_terms_terms[numpy.where(matrix_terms_terms > 0)]))  
+        
+        print "matrix_terms_terms[numpy.where(matrix_terms_terms > 0)] = (1 + numpy.log10(matrix_terms_terms[numpy.where(matrix_terms_terms > 0)]))"
+        print matrix_terms_terms 
+        
+        matrix_terms_terms = numpy.transpose(numpy.transpose(matrix_terms_terms) * numpy.log10(TKa))
+        
+        print "matrix_terms_terms = numpy.transpose(numpy.transpose(matrix_terms_terms) * numpy.log10(TKa))"
+        print matrix_terms_terms
         
         Util.create_a_dir(space.space_path + "/dor")
         
@@ -8843,12 +8860,16 @@ class TCORMatrixHolder(MatrixHolder):
         #corpus_lsi = lsi[corpus_tfidf]
         
         print "------"
-        print matrix_terms_terms
+        # print matrix_terms_terms
         print "------"
         
         #matrix_docs_terms=matrix_docs_terms ** 2 # matrix_docs_terms
         norma=numpy.sqrt( ( matrix_terms_terms ** 2 ).sum(axis=0) ) # sum all columns
-        norma+=0.00000001
+        print "norma=numpy.sqrt( ( matrix_terms_terms ** 2 ).sum(axis=0) ) # sum all columns"
+        print norma
+        norma[numpy.where(norma == 0)] += 0.00000001
+        print "norma[numpy.where(norma == 0)] += 0.00000001"
+        print norma
         matrix_terms_terms=matrix_terms_terms/norma
         
         print "+++++"
