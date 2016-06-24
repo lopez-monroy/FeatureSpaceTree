@@ -154,12 +154,14 @@ class Util(object):
         'corpus_pattern' in kwargs_corpus and\
         'file_pattern' in kwargs_corpus and\
         'cat_pattern' in kwargs_corpus:
+            print "ALL CORPUS OPTIONS."
             corpus = CorpusCategorizedFromCatMap(categories,
                                        kwargs_corpus['corpus_path'],
+                                       kwargs_corpus['cat_map'],
                                        kwargs_corpus['corpus_pattern'],
                                        kwargs_corpus['file_pattern'],
-                                       kwargs_corpus['cat_pattern'],
-                                       kwargs_corpus['cat_map'],)
+                                       kwargs_corpus['cat_pattern'])
+            
         else:
             corpus = CorpusCategorizedFromCatMap(categories, kwargs_corpus['corpus_path'], kwargs_corpus['cat_map'])
 
@@ -372,6 +374,9 @@ class Util(object):
 
         match = re.match(user_corpus_path,
                          corpus_path)
+        
+        print match.group(1)
+        print files_pattern
 
         corpus = LazyCorpusLoader(match.group(1),
                                   CategorizedPlaintextCorpusReader,
@@ -874,7 +879,7 @@ class CorpusCategorizedFromCatMap(Corpus):
         return self._corpus
 
     def build_corpus(self, corpus_path, user_corpus_path, files_pattern, categories_pattern):
-        self._corpus = Util.configure_categorized_corpus_from_cat_map(corpus_path, self.__cat_map, user_corpus_path, files_pattern)
+        self._corpus = Util.configure_categorized_corpus_from_cat_map(corpus_path, self.__cat_map, user_corpus_path, files_pattern)  
         self.__docs = self._corpus.fileids(categories = self._categories)
 
         # DEBUG: Uncomment if you want to see the selected documents
@@ -1751,6 +1756,19 @@ class AttributeHeaderVW2V(AttributeHeader):
             self.__str_concepts += ["dimension_" + str(e)]
             
         return self.__str_concepts
+    
+
+class AttributeHeaderTextDarwin(AttributeHeader):
+
+    def __init_(self, fdist, vocabulary, concepts):
+        super(AttributeHeaderTextDarwin, self).__init__(fdist, vocabulary, concepts)
+
+    def get_attributes(self):
+        self.__str_concepts = []        
+        for e in range(self._concepts):
+            self.__str_concepts += ["dimension_" + str(e)]
+            
+        return self.__str_concepts
 
 
 class FactoryDecoratorAttributeHeader(object):
@@ -1784,6 +1802,8 @@ class FactorySimpleDecoratorAttributeHeader(FactoryDecoratorAttributeHeader):
             return Distances2CDAttributeHeader(attribute_header, kwargs["k_centers"]);
         if option == EnumDecoratorsMatrixHolder.FIXED_QUANTIZED_TFIDF:
             return FixedQuantizedTFIDFAttributeHeader(attribute_header, kwargs["k_centers"]);
+        if option == EnumDecoratorsMatrixHolder.TEXT_DARWIN:
+            return TextDarwinAttributeHeader(attribute_header);
             
     
 class DecoratorAttributeHeader(AttributeHeader):
@@ -1886,6 +1906,21 @@ class Distances2CDAttributeHeader(DecoratorAttributeHeader):
         self.__str_concepts = []        
         for e in range(self.__k):
             self.__str_concepts += ["prototype_" + str(e)]
+            
+        return self.__str_concepts
+    
+    
+class TextDarwinAttributeHeader(DecoratorAttributeHeader):
+    
+    def __init__(self, attribute_header):
+        super(TextDarwinAttributeHeader, self).__init__(attribute_header)
+
+    def get_attributes(self):
+        old_attributes = super(TextDarwinAttributeHeader, self).get_attributes()
+        
+        self.__str_concepts = []        
+        for e in range(len(old_attributes)*10):
+            self.__str_concepts += ["dim_" + str(e)]
             
         return self.__str_concepts
     
@@ -3238,7 +3273,8 @@ class EnumDecoratorsMatrixHolder(object):
      FIXED_DISTANCES_TO_CLUSTER_DOCS,
      DISTANCES_TO_CLUSTER_TERMS,
      DISTANCES_TO_CLUSTER_DOCS,
-     FIXED_QUANTIZED_TFIDF) = range(11)
+     FIXED_QUANTIZED_TFIDF,
+     TEXT_DARWIN) = range(12)
 
 
 class FactoryDecoratorMatrixHolder(object):
@@ -3308,6 +3344,14 @@ class FactorySimpleDecoratorMatrixHolder(FactoryDecoratorMatrixHolder):
             return FactoryQuantizedTFIDFDecoratorMatrixHolder(k_centers=kwargs["k_centers"], precomputed_dict=pc);
         
         #FIXED_QUANTIZED_TFIDF
+        
+        if option == EnumDecoratorsMatrixHolder.TEXT_DARWIN:
+            if "precomputed_dict" in kwargs:
+                pc = kwargs["precomputed_dict"]
+            else:
+                pc = "NO_PRECOMPUTED"
+            return FactoryTextDarwinDecoratorMatrixHolder(precomputed_dict=pc);
+        
 
 class AbstractFactoryDecoratorMatrixHolder(object):
 
@@ -3495,6 +3539,29 @@ class FactoryDistances2CDDecoratorMatrixHolder(AbstractFactoryDecoratorMatrixHol
     def load_train_data(self, space):
         pass
     
+
+class FactoryTextDarwinDecoratorMatrixHolder(AbstractFactoryDecoratorMatrixHolder):
+    
+    def __init__(self, k_centers=300, precomputed_dict="NO_PRECOMPUTED", distance="euclidean"):
+        self.k_centers = k_centers
+        self.precomputed_dict = precomputed_dict
+        self.distance = distance
+
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+        return AttributeHeaderTextDarwin(fdist, vocabulary, concepts)
+
+    def create_matrix_train_holder(self, matrix_holder, space):        
+        return TextDarwinTrainMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict, self.distance)
+
+    def create_matrix_test_holder(self, matrix_holder, space):
+        return TextDarwinTestMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict, self.distance)
+    
+    def save_train_data(self, space):
+        pass
+
+    def load_train_data(self, space):
+        pass
+    
     
 class DecoratorMatrixHolder(MatrixHolder):
     
@@ -3527,6 +3594,13 @@ class DecoratorMatrixHolder(MatrixHolder):
     
     def set_matrix_terms(self, value):    # set some useful information for Decorators e.g. term matrix
         self.__matrix_holder_object.set_matrix_terms(value)
+    
+    # FIXME: THIS INTERFACE SHOULD BE NAMED IN A GENERAL WAY. E.G. GET_MODEL!!!    
+    def get_w2v(self):
+        return self.__matrix_holder_object.get_w2v()
+    
+    def set_w2v(self, value):
+        self.__matrix_holder_object.set_w2v(value)
         
     # THESE ARE THE BASIC THINGS THAT THE DECORATOR ADDS FUNCTIONALITY
         
@@ -5511,6 +5585,368 @@ class Distances2CDTestMatrixHolder(Distances2CTMatrixHolder):
         return super(Distances2CDTestMatrixHolder, self).load_train_data(space)
     
     
+class TextDarwinMatrixHolder(DecoratorMatrixHolder):
+    
+    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED", distance="euclidean", train_model=None):
+        super(TextDarwinMatrixHolder, self).__init__(matrix_holder)
+        self.__k = k
+        #self.term_matrix = term_matrix
+        self.__clusterer = None
+        self._precomputed_dict=precomputed_dict
+        self._matrix = None
+        self._distance=distance
+        self.train_model = train_model
+        
+    def get_k_centers(self):
+        return self.__k
+    
+    def set_k_centers(self, value):
+        self.__k = value
+        
+    def compute_prototypes(self, matrix_terms):
+        k= self.__k
+        
+        print "Begining clustering."
+        if self._precomputed_dict == "NO_PRECOMPUTED":
+            clusterer = KMeans(n_clusters=k, verbose=1, n_jobs=4)
+            clusterer.fit(matrix_terms)
+        else:
+            print "The clusterer was precomputed  :)"
+            cache_file = self._precomputed_dict        
+            clusterer =  joblib.load(cache_file)
+            
+        print "End of clustering."
+        
+        self.set_shared_resource(clusterer)
+
+    def build_matrix_quantized(self,
+                          space,
+                          virtual_classes_holder,
+                          corpus_file_list,
+                          mat_terms):
+
+        t1 = time.time()
+        print "Starting FixedDistances2CTMatrixHolder representation..."
+        
+        k_centers = self.__k
+        clusterer = self.__clusterer
+        
+        len_vocab = len(space._vocabulary)
+
+        Util.create_a_dir(space.space_path + "/sparse")
+        rows_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "rows_sparse.txt", "w")
+        columns_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "columns_sparse.txt", "w")
+        vals_file = open(space.space_path + "/sparse/" + space.id_space + "_" + "vals_sparce.txt", "w")
+        
+        dense_flag = True
+        
+        if ('sparse' in space.kwargs_space) and space.kwargs_space['sparse']:            
+            matrix_docs_prot = numpy.zeros((1, 1),
+                                        dtype=numpy.float64)
+            dense_flag = False
+        else:
+            matrix_docs_prot = numpy.zeros((len(corpus_file_list), 3000),
+                                        dtype=numpy.float64)
+            dense_flag = True
+        
+        instance_categories = []
+        instance_namefiles = []
+        
+        ################################################################
+        # SUPER SPEED 
+        unorder_dict_index = {}
+        id2word = {}
+        #word2prediction = {}
+        for (term, u) in zip(space._vocabulary, range(len_vocab)):
+            unorder_dict_index[term] = u
+            id2word[u] = term
+            #word2prediction[term] = clusterer.predict(mat_terms[unorder_dict_index[term], :])
+        ###############################################################            
+        
+#         centroids = clusterer.cluster_centers_
+#         # dist = DistanceMetric.get_metric('euclidean')
+#         # print self.get_matrix()
+#         # print "-------------------------------"
+#         # print centroids
+#         print "Computing distances/similarity."
+#         
+#         matrix_docs_prot = None
+#         if self._distance == 'euclidean':
+#             matrix_docs_prot = metrics.pairwise.euclidean_distances(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids) 
+#             #print "=========================================="
+#             #print matrix_docs_prot
+#         elif self._distance == 'cosine_distance':
+#             matrix_docs_prot = metrics.pairwise.cosine_distances(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+#         elif self._distance == 'cosine_similarity':
+#             matrix_docs_prot = metrics.pairwise.cosine_similarity(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+#         elif self._distance == 'rbf':
+#             matrix_docs_prot = metrics.pairwise.rbf_kernel(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+#         elif self._distance == 'lineal':
+#             matrix_docs_prot = metrics.pairwise.linear_kernel(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+#         else:
+#             print "No distance or similarty measure was indicated."
+#             sys.exit()
+#         print "End of computing distances/similarity."
+                
+        corpus_bow = []    
+        i = 0      
+        for autor in space.categories:
+            archivos = virtual_classes_holder[autor].cat_file_list
+            for arch in archivos:
+                tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
+                docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
+                tamDoc = len(tokens)
+                
+                # begining the block to build the arrangament of w2v vectors to be encoded by other script in matlab
+                Util.create_a_dir(space.space_path + "/tmp_matlab")
+                pathDataToBeEncoded = space.space_path + "/tmp_matlab/" + space.id_space + "_" + "tmpFileDataToBeEncoded.csv"
+                tmpFileDataToBeEncoded = open(pathDataToBeEncoded, "w")
+                
+                for token in tokens:
+                    if token in tokens:
+                        w2v_vec =  self.get_w2v()[token]
+                        tmpFileDataToBeEncoded.write(",".join(map(str, w2v_vec))+"\n")
+                tmpFileDataToBeEncoded.close()
+                
+                path_for_enc = space.space_path + "/tmp_matlab/" + space.id_space + "_" + "enc.csv" 
+                cmd = ("matlab -nodisplay -nodesktop -nosplash -r \"try, clear all; clc; close all; dataToBeEncoded='" + 
+                pathDataToBeEncoded + "' ;cwd='$PWD'" +  
+                "; path_for_enc='" + path_for_enc + 
+                "' ; run('/media/aplm/Extension/aplm/MatlabWorkspace/bfernando-videodarwin/TextDarwin.m'); end;quit\"")
+                print cmd
+                print i
+                subprocess.call(cmd,shell=True)        
+                enc = numpy.genfromtxt(path_for_enc, delimiter=',')
+                if tamDoc > 0:
+                    matrix_docs_prot[i, :] = enc
+                
+                # ending the block to build the arrangament of w2v vectors to be encoded by other script in matlab
+                
+                # EXTRACODE FOR PRINT THE CORPUS###################################
+#                 shelf = shelve.open("./exp_validacion1024_tc/1_TermSplit_test.dat", protocol=2)
+#                 #print shelf.keys()
+#                 
+#                 
+#                 target_tokens = []
+#                 for tok in tokens:
+#                     target_tokens += [str(word2prediction[tok][0])]
+#                     #print target_tokens[i_tok]
+#                     #(NDARRAY)print type(word2prediction[tok])
+#                     #print word2prediction[tok]                    
+#                 
+#                 shelf[arch.encode('utf8')] = target_tokens
+#                 
+#                 shelf.close()
+                # EXTRACODE FOR PRINT THE CORPUS###################################
+                     
+                #print "document: ", i
+                
+                ################################################################
+                # SUPER SPEED 
+                bow = []
+                for pal in docActualFd.keys_sorted():
+                    
+                    if (pal in unorder_dict_index) and tamDoc > 0:
+                        freq = docActualFd[pal] #/ float(tamDoc)
+                    else:
+                        freq = 0.0
+                    
+                    if dense_flag:
+                        bow += [(unorder_dict_index[pal], freq)]
+                        
+                        
+                        #print matrix_docs_docs
+                        
+                        #print "##########################" + str(len(mat_docs_terms))
+                        
+                        #print mat_docs_terms
+                        
+                        #print unorder_dict_index[pal]
+                        
+                        #print "##########################MAT_DOCS_TERMS: " + str(len(mat_docs_terms[:, unorder_dict_index[pal]]))
+                        #print "##########################MAT_DOCS_TERMS_T: " + str(len((mat_docs_terms[:, unorder_dict_index[pal]].transpose()), axis=1))
+                        
+                        #print "##########################MAT_DOCS_DOCS: " + str(len(matrix_docs_docs[i, :]))
+                        ####### print "palabra: ", pal, "   ",unorder_dict_index[pal] 
+                        #######print "La i: ", i
+                        #######print clusterer.predict(mat_terms[unorder_dict_index[pal], :])
+                        #######print "blablabla"
+                        #######print matrix_docs_prot
+                        # FIXED: bottle neck
+                        # matrix_docs_prot[i, clusterer.predict(mat_terms[unorder_dict_index[pal], :])] += freq #/ tamDoc
+                        # matrix_docs_prot[i, word2prediction[pal]] += freq #/ tamDoc
+                        
+                        
+                    
+                    if freq > 0.0:
+                        rows_file.write(str(i) + "\n")
+                        columns_file.write(str(unorder_dict_index[pal]) + "\n")
+                        vals_file.write(str(freq) + "\n")
+                    
+                ################################################################
+
+                ################################################################
+                # VERY SLOW
+#                j = 0
+#                for pal in space._vocabulary:
+#                        
+#                    if (pal in docActualFd) and tamDoc > 0:
+#                        #print str(freq) + " antes"
+#                        freq = docActualFd[pal] / float(tamDoc) #math.log((1 + docActual.diccionario[pal] / float(docActual.tamDoc)), 10) / math.log(1+float(docActual.tamDoc),10)
+##                        freq = math.log((1 + diccionario[pal] / (2*float(tamDoc))), 2)
+##                        freq = math.log((1 + docActual.diccionario[pal] / (float(docActual.tamDoc))), 2)
+#                        #print str(freq) + " despues"
+#                        # uncomment the following line if you want a boolean weigh :)
+#                        # freq=1.0
+#                        #if pal == "xico":
+#                        #    print pal +"where found in: "  +arch
+#                    else:
+#                        freq = 0
+##                    terminos[j] += freq
+#                    matrix_docs_terms[i,j] = freq
+#
+#                    j += 1
+                    ############################################################
+                
+                i+=1
+                
+                
+                instance_categories += [autor]
+                instance_namefiles += [arch]
+                
+                corpus_bow += [bow]
+            
+        #Util.create_a_dir(space.space_path + "/dor")
+        
+        #print corpus_bow
+            
+        #corpora.MmCorpus.serialize(space.space_path + "/dor/" + space.id_space + "_" + self._id_dataset + "_corpus.mm", corpus_bow)
+        #self.corpus_bow = corpora.MmCorpus(space.space_path + "/dor/" + space.id_space + "_" + self._id_dataset + "_corpus.mm") # load a corpus of nine documents, from the Tutorials
+        
+        #print self.corpus_bow
+        
+        self.id2word = id2word
+        
+        #self.tfidf = models.TfidfModel(corpus) # step 1 -- initialize a model
+        
+        #corpus_tfidf = tfidf[corpus]
+        
+        #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
+        #corpus_lsi = lsi[corpus_tfidf]
+
+        self._matrix = matrix_docs_prot
+        self._instance_categories = instance_categories
+        self._instance_namefiles = instance_namefiles
+        
+        rows_file.close()
+        columns_file.close()
+        vals_file.close()
+
+        #print matConceptosTerm
+
+        t2 = time.time()
+        print "End of FixedDistances2CTMatrixHolder representation. Time: ", str(t2-t1)
+        
+    def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
+        cache_file = "%s/%s" % (self.get_space().space_path, self.get_space().id_space)        
+        self.__clusterer =  joblib.load(cache_file + '_clusterer.pkl')
+        return self.__clusterer
+    
+    def set_shared_resource(self, value):    # set some useful information for Decorators e.g. term matrix
+        cache_file = "%s/%s" % (self.get_space().space_path, self.get_space().id_space)
+        joblib.dump(value, cache_file + '_clusterer.pkl')         
+        self.__clusterer=value
+        
+    def get_matrix(self):
+        #super(FixedQuantizedTrainMatrixHolder, self).get_matrix()
+        if self._matrix is not None:
+            return self._matrix
+        else:
+            return super(FixedDistances2CTMatrixHolder, self).get_matrix()
+            
+            
+        
+
+    def set_matrix(self, value):
+        self._matrix = value
+        
+    #def build_matrix(self):
+        # self.__matrix_holder_object.build_matrix()
+        #pass
+        
+        
+class TextDarwinTrainMatrixHolder(TextDarwinMatrixHolder):
+    
+    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED", distance="euclidean"):
+        super(TextDarwinTrainMatrixHolder, self).__init__(matrix_holder, k, precomputed_dict, distance)
+        
+    def build_matrix(self):
+        #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        super(TextDarwinTrainMatrixHolder, self).build_matrix()
+        
+        
+        # WE DO NOT NEED THIS FOR TEXTDARWIN, SINCE WE DONOT NEEW TO SAVE ANY SHARED RESOURCE.
+        # self.compute_prototypes(super(FixedDistances2CTTrainMatrixHolder, self).get_matrix_terms())
+        
+        
+        ####NOT NECESARY self.set_matrix(super(FixedDistances2CTTrainMatrixHolder, self).get_matrix())
+        #print self.get_matrix_terms()
+        
+        #HERE WE NEED TO COMPUTE THE EVOLUTION
+        self.build_matrix_quantized(super(TextDarwinTrainMatrixHolder, self).get_space(),
+                              super(TextDarwinTrainMatrixHolder, self).get_space().virtual_classes_holder_train,
+                              super(TextDarwinTrainMatrixHolder, self).get_space().corpus_file_list_train,
+                              super(TextDarwinTrainMatrixHolder, self).get_matrix_terms())
+        #HERE WE NEED TO COMPUTE THE EVOLUTION
+        
+    #def build_matrix(self):
+        # self.__matrix_holder_object.build_matrix()
+        #pass
+        
+    def save_train_data(self, space):
+        super(TextDarwinTrainMatrixHolder, self).save_train_data(space)
+        #cache_file = "%s/%s" % (space.space_path, space.id_space)
+        #joblib.dump(self.get_shared_resource(), cache_file + '_clusterer.pkl') 
+    
+    def load_train_data(self, space):
+        train_matrix_holder = super(TextDarwinTrainMatrixHolder, self).load_train_data(space)
+        train_matrix_holder = TextDarwinTrainMatrixHolder(train_matrix_holder, self.get_k_centers()) 
+        #cache_file = "%s/%s" % (space.space_path, space.id_space)
+        #train_matrix_holder.set_shared_resource(joblib.load(cache_file + '_clusterer.pkl'))
+    
+        return train_matrix_holder
+         
+    
+class TextDarwinTestMatrixHolder(TextDarwinMatrixHolder):
+    
+    def __init__(self, matrix_holder_object, k=300, precomputed_dict="NO_PRECOMPUTED", distance="euclidean"):
+        super(TextDarwinTestMatrixHolder, self).__init__(matrix_holder_object, k, precomputed_dict, distance)
+        
+    def build_matrix(self):
+        #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        super(TextDarwinTestMatrixHolder, self).build_matrix()
+        
+        #self.compute_prototypes(super(FixedQuantizedTestMatrixHolder, self).get_matrix_terms())
+        
+        # WE DO NOT NEED THIS FOR TEXTDARWIN, SINCE WE DONOT NEEW TO SAVE ANY SHARED RESOURCE.
+        #self.set_shared_resource(super(TextDarwinTestMatrixHolder, self).get_shared_resource())
+        
+        ####NOT NECESARY self.set_matrix(super(FixedDistances2CTTestMatrixHolder, self).get_matrix())
+        
+        #HERE WE NEED TO COMPUTE THE EVOLUTION
+        self.build_matrix_quantized(super(TextDarwinTestMatrixHolder, self).get_space(),
+                              super(TextDarwinTestMatrixHolder, self).get_space().virtual_classes_holder_test,
+                              super(TextDarwinTestMatrixHolder, self).get_space().corpus_file_list_test,
+                              super(TextDarwinTestMatrixHolder, self).get_matrix_terms())
+        #HERE WE NEED TO COMPUTE THE EVOLUTION
+
+    def save_train_data(self, space):
+        super(TextDarwinTestMatrixHolder, self).save_train_data(space)
+    
+    def load_train_data(self, space):
+        return super(TextDarwinTestMatrixHolder, self).load_train_data(space)
+    
+    
 class CSAMatrixHolder(MatrixHolder):
 
     def __init__(self, space):
@@ -6977,7 +7413,7 @@ class BOWMatrixHolder(MatrixHolder):
                 for pal in docActualFd.keys_sorted():
                     
                     if (pal in unorder_dict_index) and tamDoc > 0:
-                        freq = docActualFd[pal] ##/ float(tamDoc)
+                        freq = docActualFd[pal] / float(tamDoc)
                     else:
                         freq = 0.0
                     
