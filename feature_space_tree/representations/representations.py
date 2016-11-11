@@ -1131,6 +1131,7 @@ class TransformedDict(collections.MutableMapping):
 
     def __getitem__(self, key):            
         #return self.store[self.__keytransform__(key)]
+        
         file_path = self.store[self.__keytransform__(key)]
         list_file_tokens_combined = []
         for kwargs_term in self._kwargs_terms:
@@ -2292,12 +2293,21 @@ class FactoryCSA2Representation(AbstractFactoryRepresentation):
         
         self.__csa2_train_matrix_holder.build_matrix()
         
-        # END OF REBUILD THE HEADER USING SUBGROUPS LABELS
-        space.attribute_header = \
-        space.representation.build_attribute_header(space._fdist,
-                                                    space._vocabulary,
-                                                    self.__csa2_train_matrix_holder.get_ordered_new_labels_set(),
-                                                    space)
+        # REBUILD THE HEADER USING SUBGROUPS LABELS
+        
+        # BUT, ... DECORATE IF NECESARY: Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__csa2_attribute_header = Util.decorate_attribute_header(self.__csa2_attribute_header,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'])
+        else:
+            space.attribute_header = \
+            space.representation.build_attribute_header(space._fdist,
+                                                        space._vocabulary,
+                                                        self.__csa2_train_matrix_holder.get_ordered_new_labels_set(),
+                                                        space)
+        # Decorating --------------------------------------------------      
+        
         # END OF REBUILD THE HEADER USING SUBGROUPS LABELS
         
         return self.__csa2_train_matrix_holder
@@ -2307,7 +2317,7 @@ class FactoryCSA2Representation(AbstractFactoryRepresentation):
                                                             train_matrix_holder=self.__csa2_train_matrix_holder)
                                                             #numpy.transpose(self.__csa_train_matrix_holder.get_matrix_terms()))
         
-        self.__csa2_test_matrix_holder.set_dimensions_soa2(self.__csa2_train_matrix_holder.get_dimensions_soa2())
+        self.__csa2_test_matrix_holder.set_dimensions_soa2(len(self.__csa2_train_matrix_holder.get_attributes()))
         
         # Decorating --------------------------------------------------
         if 'decorators_matrix' in space.kwargs_space:   
@@ -2325,12 +2335,18 @@ class FactoryCSA2Representation(AbstractFactoryRepresentation):
         
         self.__csa2_test_matrix_holder.build_matrix()
         
-        # END OF REBUILD THE HEADER USING SUBGROUPS LABELS
-        space.attribute_header = \
-        space.representation.build_attribute_header(space._fdist,
-                                                    space._vocabulary,
-                                                    self.__csa2_train_matrix_holder.get_ordered_new_labels_set(),
-                                                    space)
+        # REBUILD THE HEADER USING SUBGROUPS LABELS
+        # BUT, ... DECORATE IF NECESARY: Decorating --------------------------------------------------
+        if 'decorators_matrix' in space.kwargs_space:   
+            self.__csa2_attribute_header = Util.decorate_attribute_header(self.__csa2_attribute_header,
+                                                                        space,  
+                                                                        space.kwargs_space['decorators_matrix'])
+        else:
+            space.attribute_header = \
+            space.representation.build_attribute_header(space._fdist,
+                                                        space._vocabulary,
+                                                        self.__csa2_train_matrix_holder.get_ordered_new_labels_set(),
+                                                        space)
         # END OF REBUILD THE HEADER USING SUBGROUPS LABELS
         
         return self.__csa2_test_matrix_holder
@@ -3273,6 +3289,10 @@ class MatrixHolder(object):
     def load_train_data(self, space):
         pass
     
+    @abstractmethod
+    def get_attributes(self, space):
+        pass
+        
 
 class EnumDecoratorsMatrixHolder(object):
 
@@ -3681,6 +3701,9 @@ class DecoratorMatrixHolder(MatrixHolder):
     
     def load_train_data(self, space):
         return self.__matrix_holder_object.load_train_data(space)
+    
+    def get_attributes(self):
+        return self.__matrix_holder_object.get_attributes()
 
 
 class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
@@ -4025,7 +4048,7 @@ class FixedQuantizedTFIDFMatrixHolder(DecoratorMatrixHolder):
                           mat_terms):
 
         t1 = time.time()
-        print "Starting BOW representation..."
+        print "Starting Quantized representation..."
         
         k_centers = self.__k
         clusterer = self.__clusterer
@@ -4071,7 +4094,7 @@ class FixedQuantizedTFIDFMatrixHolder(DecoratorMatrixHolder):
                 tokens = virtual_classes_holder[autor].dic_file_tokens[arch]
                 docActualFd = FreqDistExt(tokens) #virtual_classes_holder[autor].dic_file_fd[arch]
                 tamDoc = len(tokens)
-                print "document: ", i
+                #print "document: ", i
                 ################################################################
                 # SUPER SPEED 
                 bow = []
@@ -4183,7 +4206,7 @@ class FixedQuantizedTFIDFMatrixHolder(DecoratorMatrixHolder):
         #lsi = models.LsiModel(corpus_tfidf, id2word=id2word, num_topics=300, chunksize=1, distributed=True) # run distributed LSA on documents
         #corpus_lsi = lsi[corpus_tfidf]
 
-        print corpus_bow_prot
+        #print corpus_bow_prot
         self._matrix = matrix_docs_prot
         self._instance_categories = instance_categories
         self._instance_namefiles = instance_namefiles
@@ -4195,7 +4218,7 @@ class FixedQuantizedTFIDFMatrixHolder(DecoratorMatrixHolder):
         #print matConceptosTerm
 
         t2 = time.time()
-        print "End of DOR representation. Time: ", str(t2-t1)
+        print "End of Quantized representation. Time: ", str(t2-t1)
         
     def get_shared_resource(self):    # return some useful information for Decorators e.g. term matrix
         cache_file = "%s/%s" % (self.get_space().space_path, self.get_space().id_space)        
@@ -6551,6 +6574,10 @@ class CSAMatrixHolder(MatrixHolder):
         super(CSAMatrixHolder, self).__init__()
         self.space = space
 
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
+
     def build_matrix_documents_concepts(self,
                                         space,
                                         virtual_classes_holder,
@@ -7124,11 +7151,11 @@ class CSA2MatrixHolder(MatrixHolder):
 
         '''
         t1 = time.time()
-        print "Starting CSA matrix documents-concepts"
+        print "Starting SOA2 matrix documents-concepts"
 
         if SOA2:
             dimensions = self.get_dimensions_soa2()
-            print "PERFORMING SECOND STEP OF SOA."
+            print "PERFORMING SECOND STEP OF SOA2."
             # print matrix_concepts_terms
         else:
             dimensions = len(space.categories)
@@ -7202,7 +7229,7 @@ class CSA2MatrixHolder(MatrixHolder):
         self._instance_namefiles = instance_namefiles
 
         t2 = time.time()
-        print "End CSA matrix documents-concepts. Time: ", str(t2-t1)
+        print "End SOA matrix documents-concepts. Time: ", str(t2-t1)
                  
     def compute_prototypes(self, matrix_terms):
         k= self.__k
@@ -7285,6 +7312,9 @@ class CSA2MatrixHolder(MatrixHolder):
 
             numTermino += 1
             
+    def get_attributes(self):
+        return self.get_ordered_new_labels_set()
+            
     def set_dimensions_soa2(self, k):
         self.__dimensions = k
         
@@ -7329,7 +7359,7 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
 
         t1 = time.time()
         
-        print "Starting CSA matrix concepts-terms..."
+        print "Starting CSA2 matrix concepts-terms..."
 
         matrix_concepts_terms = numpy.zeros((len(space.categories), len(space._vocabulary)),
                                             dtype=numpy.float64)
@@ -7417,7 +7447,7 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
         self._matrix_concepts_terms0 = matrix_concepts_terms
 
         t2 = time.time()
-        print "End CSA matrix concepts-terms. Time: ", str(t2 - t1)
+        print "End CSA2 matrix concepts-terms. Time: ", str(t2 - t1)
 
 
     def build_matrix_concepts_terms2(self,space):
@@ -7437,7 +7467,7 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
 
         t1 = time.time()
         
-        print "Starting CSA matrix concepts-terms..."
+        print "Starting SOA2 matrix concepts-terms..."
         
         
         data_training={}
@@ -7449,8 +7479,9 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
         
         pivot = 0
         for category in space.categories:
-            #print "TheCAT:"+category
+            print "TheCAT: " + category
             files = space.virtual_classes_holder_train[category].cat_file_list
+            print "files: ", len(files) 
             submatrix_concepts_docs = numpy.zeros((len(space.categories), len(files)),
                                            dtype=numpy.float64)
             #k = 0
@@ -7465,7 +7496,7 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
             pivot = pivot + len(files)
            
                 
-            print submatrix_concepts_docs
+            #print submatrix_concepts_docs
             
             # FIXME: HARDCODE FLAG TO INTER-CLUSTER
             if space.kwargs_space["subclassing"]["mode"] == "inter-class":
@@ -7482,7 +7513,7 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
                 clusterer.fit(target_mat)
                 good_clusterer = clusterer
                 print "NUMBER OF COMPONENTS: " + str(good_clusterer.n_clusters)
-                set_of_new_labels += [category + "SCK172435EW" + str(subgroup) 
+                set_of_new_labels += [category + ":::" + str(subgroup) 
                                       for subgroup in range(good_clusterer.n_clusters)]
                 
             if "EM" == space.kwargs_space["subclassing"]["clusterer"]:
@@ -7499,7 +7530,7 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
                                             covariance_type=space.kwargs_space['subclassing']["covariance_type"],
                                             n_iter=100,
                                             n_init=10,
-                                            thresh=.000001,
+                                            tol=.000001,
                                             min_covar=.000001)
                     target_mat=numpy.transpose(submatrix_concepts_docs)
                     # clusterer.fit(target_mat[1:50, :])
@@ -7510,13 +7541,14 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
                     
                     the_log_likelihoods, the_resposibilities = clusterer.score_samples(target_mat)
                     new_score = the_log_likelihoods.mean()
-                    
-                    print "SC: ", new_score
+
+                    print "1) best_score: ", best_score
+                    print "1) new_score: ", new_score
                     if best_score is not None:
                         if numpy.abs(new_score - best_score) < .0001:
                             break
                         else:
-                            if new_score < best_score:
+                            if new_score > best_score:
                                 best_score = new_score
                                 good_clusterer = clusterer
                             else:
@@ -7526,21 +7558,26 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
                         good_clusterer = clusterer
                         
                     
-                    print best_score
-                    print good_clusterer
+                    print "2) best_score: ", best_score
+                    print "2) new_score: ", new_score
+                    print "good_clusterer: ", good_clusterer
+                    
+                    # There are no more instances to cluster
+                    if it == len(files):                        
+                        break
                 
                 print "NUMBER OF COMPONENTS: " + str(good_clusterer.n_components)
-                set_of_new_labels += [category + "SCK172435EW" + str(subgroup) 
+                set_of_new_labels += [category + ":::" + str(subgroup) 
                                       for subgroup in range(good_clusterer.n_components)]
                     
             instance_subcategories = good_clusterer.predict(target_mat)
-            print instance_subcategories
+            print "INSTANCE_SUBCATEGORIES: ", instance_subcategories
             print "CLUSTERING FINISHED..."
             
             data_training[category]= zip([category] * len(files), instance_subcategories, files)
             
             new_labels=[]
-            new_labels += [new_info[0] + "SCK172435EW" + str(new_info[1]) 
+            new_labels += [new_info[0] + ":::" + str(new_info[1]) 
                            for new_info in data_training[category]]
             
             for new_label, the_file in zip(new_labels, files):
@@ -7558,12 +7595,14 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
             if space.kwargs_space["subclassing"]["mode"] == "inter-class":
                 break
             
+            
+        # Make consistent the sc_data_training with the new set of labels.    
         for ee in set_of_new_labels:
             if ee not in sc_data_training:
                 sc_data_training[ee]=[]
         
         self.set_dimensions_soa2(len(set_of_new_labels))
-        print self.get_dimensions_soa2()
+        print "get_dimensions_soa2: ", self.get_dimensions_soa2()
             
         
 
@@ -7585,7 +7624,7 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
         ###############################################################         
         i=0
         for author in set_of_new_labels:
-            print author
+            # print "AUTHOR?: ", author
             #print sc_data_training[author]
             archivos = sc_data_training[author]
             #print archivos
@@ -7593,7 +7632,7 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
             for arch in archivos:
                 #print arch
                 #print virtual_classes_holder[author.split("SCK172435EW")[0]].dic_file_tokens.items()
-                tokens = space.virtual_classes_holder_train[author.split("SCK172435EW")[0]].dic_file_tokens[arch]
+                tokens = space.virtual_classes_holder_train[author.split(":::")[0]].dic_file_tokens[arch]
 #                 
 #         i = 0
 #         for author in space.categories:
@@ -7608,7 +7647,6 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
                 docActualFd = FreqDistExt(tokens) #space.virtual_classes_holder_train[author].dic_file_fd[arch]
                 tamDoc = len(tokens)
                 total_terms_in_class += tamDoc
-                
                 ################################################################
                 # SUPER SPEED 
                 
@@ -7667,7 +7705,7 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
         print "WWWWWWWWWWWWWWWW"
         #print self._instance_subcategories
         t2 = time.time()
-        print "End CSA matrix concepts-terms. Time: ", str(t2 - t1)
+        print "End SOA2 matrix concepts-terms. Time: ", str(t2 - t1)
 
 
     def normalize_matrix(self, normalizer, matrix):
@@ -7970,6 +8008,10 @@ class BOWMatrixHolder(MatrixHolder):
         super(BOWMatrixHolder, self).__init__()
         self.space = space
         #self.build_matrix()
+        
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
 
     def build_matrix_doc_terminos(self,
                                   space,
@@ -9164,6 +9206,10 @@ class DORMatrixHolder(MatrixHolder):
         self.corpus_tfidf = None
         self.corpus_lsa = None    
         self._id_dataset = dataset_label
+        
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
         
     def get_tfidf(self):
         return self.tfidf
