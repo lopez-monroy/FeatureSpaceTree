@@ -181,6 +181,27 @@ class TermSplit(Terms):
     def calc_terms(self):
         return Util.calc_split(self.kwargs["string"])
     
+class TermSplitNGram(Terms):
+
+    def __init__(self, kwargs_terms):
+        super(TermSplitNGram, self).__init__(kwargs_terms,
+                                         "TermSplitNGram")
+
+    def calc_ngrams_g(self, tokens, n):
+        #tokens = nltk.regexp_tokenize(string, regexp)
+
+        ngrams = nltk.ngrams(tokens, n)
+
+        final_tokens = []
+        for ngram in ngrams:
+            final_tokens += ['~'.join(list(ngram))]
+
+        return final_tokens
+
+    def calc_terms(self):
+        return self.calc_ngrams_g(Util.calc_split(self.kwargs["string"]),
+                                  self.kwargs["nlen"])
+    
 
 class TermTag(Terms):
 

@@ -68,7 +68,8 @@ class EnumTermLex(object):
      AMBIGUOUS,
      SPLIT,
      REG_EXP_IGNORE,
-     TAG) = range(27)
+     TAG,
+     SPLIT_NGRAM) = range(28)
      
 
 class FactoryTerm(object):
@@ -173,6 +174,9 @@ class FactoryTermLex(FactoryTerm):
         
         elif option == EnumTermLex.TAG:
             return TermTag(kwargs)
+        
+        elif option == EnumTermLex.SPLIT_NGRAM:
+            return TermSplitNGram(kwargs)
 
         #elif option == EnumTermLex.SFM:
         #    return TermSFM(kwargs[0])

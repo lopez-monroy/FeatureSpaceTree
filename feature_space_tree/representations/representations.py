@@ -33,6 +33,7 @@
 import math
 import sys
 import os
+import os.path
 import random
 import re
 import time
@@ -6109,6 +6110,8 @@ class VLADMatrixHolder(DecoratorMatrixHolder):
         self._matrix_terms_dimensions = mat_terms_dimensions
         print self._matrix_terms_dimensions
         ###############################################################
+        if not os.path.isfile(self._env_file): 
+            numpy.savetxt(self._env_file, self._matrix_terms_dimensions, delimiter=",")
       
         corpus_bow = []    
         i = 0      
@@ -8253,6 +8256,10 @@ class LSAMatrixHolder(MatrixHolder):
         self.corpus_lsa = None    
         self._id_dataset = dataset_label
         
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
+        
     def get_tfidf(self):
         return self.tfidf
     
@@ -8728,6 +8735,10 @@ class TFIDFMatrixHolder(MatrixHolder):
         self.corpus_tfidf = None
         self.corpus_lsa = None    
         self._id_dataset = dataset_label
+        
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
         
     def get_tfidf(self):
         return self.tfidf
@@ -9765,6 +9776,10 @@ class TCORMatrixHolder(MatrixHolder):
         self.corpus_tfidf = None
         self.corpus_lsa = None    
         self._id_dataset = dataset_label
+    
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
         
     def get_tfidf(self):
         return self.tfidf
@@ -10359,6 +10374,10 @@ class LDAMatrixHolder(MatrixHolder):
         self.corpus_tfidf = None
         self.corpus_lda = None    
         self._id_dataset = dataset_label
+    
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
         
     def get_tfidf(self):
         return self.tfidf
@@ -10809,6 +10828,10 @@ class W2VVLADMatrixHolder(MatrixHolder):
             self._w2v_txt = self.space.kwargs_space['w2v_txt']
         else:
             self._w2v_txt = "NOT_PROVIDED"
+    
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
         
     def get_w2v(self):
         return self._train_model
@@ -11337,6 +11360,10 @@ class W2VMatrixHolder(MatrixHolder):
             self._w2v_txt = self.space.kwargs_space['w2v_txt']
         else:
             self._w2v_txt = "NOT_PROVIDED"
+    
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
         
     def get_w2v(self):
         return self._train_model
@@ -11840,6 +11867,10 @@ class VW2VMatrixHolder(MatrixHolder):
             self._w2v_txt = self.space.kwargs_space['w2v_txt']
         else:
             self._w2v_txt = "NOT_PROVIDED"
+    
+    def get_attributes(self, space):
+        print "NOT NECESSARY YET!!!"
+        pass
         
     def get_w2v(self):
         return self._train_model
