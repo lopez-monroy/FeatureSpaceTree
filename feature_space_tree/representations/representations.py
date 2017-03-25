@@ -362,7 +362,21 @@ class Util(object):
         print attribute_header.get_attributes()
         print "BLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
         return attribute_header
-
+    
+    @staticmethod
+    def decorate_attribute_header2(attribute_header, space, kwargs_decorators_matrix_holder):
+        
+        factory_simple_decorator_matrix_holder = FactorySimpleDecoratorMatrixHolder()
+        for kwargs_decorator_matrix_holder in kwargs_decorators_matrix_holder:
+            print kwargs_decorator_matrix_holder
+            decorator_matrix_holder = \
+            factory_simple_decorator_matrix_holder.build(kwargs_decorator_matrix_holder["type_decorator_matrix"],
+                                                   kwargs_decorator_matrix_holder,
+                                                   attribute_header)  # all this arguments kwargs and matrix_holder necessaries???
+            
+            attribute_header = decorator_matrix_holder.create_attribute_header(attribute_header, space)
+            
+        return attribute_header
 
     @staticmethod
     def configure_categorized_corpus_from_cat_map(corpus_path,
@@ -2138,7 +2152,7 @@ class FactoryCSARepresentation(AbstractFactoryRepresentation):
         
         # Decorating --------------------------------------------------
         if 'decorators_matrix' in space.kwargs_space:   
-            self.__csa_attribute_header = Util.decorate_attribute_header(self.__csa_attribute_header,
+            self.__csa_attribute_header = Util.decorate_attribute_header2(self.__csa_attribute_header,
                                                                         space,  
                                                                         space.kwargs_space['decorators_matrix'])
         # Decorating --------------------------------------------------      
@@ -3355,7 +3369,18 @@ class FactorySimpleDecoratorMatrixHolder(FactoryDecoratorMatrixHolder):
                 pc = kwargs["precomputed_dict"]
             else:
                 pc = "NO_PRECOMPUTED"
-            return FactoryFixedDistances2CDDecoratorMatrixHolder(k_centers=kwargs["k_centers"], precomputed_dict=pc);
+                
+            if "distance" in kwargs:
+                dist = kwargs["distance"]
+            else:
+                dist = "euclidean"
+                
+            if "one2doc" in kwargs:
+                one2doc = kwargs["one2doc"]
+            else:
+                one2doc = False
+
+            return FactoryFixedDistances2CDDecoratorMatrixHolder(k_centers=kwargs["k_centers"], precomputed_dict=pc, distance=dist, one2doc=one2doc);
 
         if option == EnumDecoratorsMatrixHolder.DISTANCES_TO_CLUSTER_TERMS:
             if "precomputed_dict" in kwargs:
@@ -3407,8 +3432,8 @@ class AbstractFactoryDecoratorMatrixHolder(object):
 
     __metaclass__ = ABCMeta
 
-    def build_attribute_header(self, fdist, vocabulary, concepts, space=None):
-        return self.create_attribute_header(fdist, vocabulary, concepts, space) 
+    def build_attribute_header(self, attribute_header, space=None):
+        return self.create_attribute_header(attribute_header, space) 
 
     def build_matrix_train_holder(self, matrix_holder, space):
         return self.create_matrix_train_holder(space)
@@ -3417,7 +3442,7 @@ class AbstractFactoryDecoratorMatrixHolder(object):
         return self.create_matrix_test_holder(space)
 
     @abstractmethod
-    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+    def create_attribute_header(self, attribute_header, space=None):
         pass
 
     @abstractmethod
@@ -3526,18 +3551,23 @@ class FactoryFixedDistances2CTDecoratorMatrixHolder(AbstractFactoryDecoratorMatr
 
 class FactoryFixedDistances2CDDecoratorMatrixHolder(AbstractFactoryDecoratorMatrixHolder):
     
-    def __init__(self, k_centers=300, precomputed_dict="NO_PRECOMPUTED"):
+    def __init__(self, k_centers=300, precomputed_dict="NO_PRECOMPUTED", distance='euclidean', one2doc=False):
         self.k_centers = k_centers
         self.precomputed_dict = precomputed_dict
+        self.distance = distance
+        self.one2doc = one2doc
 
-    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
-        return FixedDistances2CDAttributeHeader(fdist, vocabulary, concepts)
+    def create_attribute_header(self, attribute_header, space=None):
+        if self.one2doc:
+            concepts = len(space.corpus_file_list_train)        
+            
+        return FixedDistances2CDAttributeHeader(attribute_header, concepts)
 
     def create_matrix_train_holder(self, matrix_holder, space):        
-        return FixedDistances2CDTrainMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict)
+        return FixedDistances2CDTrainMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict, self.distance, self.one2doc)
 
     def create_matrix_test_holder(self, matrix_holder, space):
-        return FixedDistances2CDTestMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict)
+        return FixedDistances2CDTestMatrixHolder(matrix_holder, self.k_centers, self.precomputed_dict, self.distance, self.one2doc)
     
     def save_train_data(self, space):
         pass
@@ -3567,14 +3597,13 @@ class FactoryDistances2CTDecoratorMatrixHolder(AbstractFactoryDecoratorMatrixHol
     def load_train_data(self, space):
         pass
     
-    
 class FactoryDistances2CDDecoratorMatrixHolder(AbstractFactoryDecoratorMatrixHolder):
     
     def __init__(self, k_centers=300, precomputed_dict="NO_PRECOMPUTED"):
         self.k_centers = k_centers
         self.precomputed_dict = precomputed_dict
 
-    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
+    def create_attribute_header(self, fdist, vocabulary, concepts, space=None):        
         return Distances2CDAttributeHeader(fdist, vocabulary, concepts)
 
     def create_matrix_train_holder(self, matrix_holder, space):        
@@ -4785,13 +4814,15 @@ class FixedDistances2CTTestMatrixHolder(FixedDistances2CTMatrixHolder):
     
 class FixedDistances2CDMatrixHolder(DecoratorMatrixHolder):
     
-    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED"):
+    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED", distance='euclidean', one2doc=False):
         super(FixedDistances2CDMatrixHolder, self).__init__(matrix_holder)
         self.__k = k
         #self.term_matrix = term_matrix
         self.__clusterer = None
         self._precomputed_dict=precomputed_dict
         self._matrix = None
+        self._distance = distance
+        self._one2doc = one2doc
         
     def get_k_centers(self):
         return self.__k
@@ -4800,12 +4831,16 @@ class FixedDistances2CDMatrixHolder(DecoratorMatrixHolder):
         self.__k = value
         
     def compute_prototypes(self, matrix_terms):
-        k= self.__k
-        
+        k= self.__k            
+            
         print "Begining clustering."
         if self._precomputed_dict == "NO_PRECOMPUTED":
-            clusterer = KMeans(n_clusters=k, verbose=1, n_jobs=4)
-            clusterer.fit(matrix_terms)
+            if self._one2doc:
+                clusterer = KMeans(n_clusters=len(matrix_terms), verbose=1, n_jobs=4)
+                clusterer.cluster_centers_ = matrix_terms
+            else:
+                clusterer = KMeans(n_clusters=k, verbose=1, n_jobs=4)
+                clusterer.fit(matrix_terms)
         else:
             cache_file = self._precomputed_dict        
             clusterer =  joblib.load(cache_file)
@@ -4851,11 +4886,11 @@ class FixedDistances2CDMatrixHolder(DecoratorMatrixHolder):
         # SUPER SPEED 
         unorder_dict_index = {}
         id2word = {}
-        word2prediction = {}
+        #word2prediction = {}
         for (term, u) in zip(space._vocabulary, range(len_vocab)):
             unorder_dict_index[term] = u
             id2word[u] = term
-            word2prediction[term] = clusterer.predict(mat_terms[unorder_dict_index[term], :])
+            #word2prediction[term] = clusterer.predict(mat_terms[unorder_dict_index[term], :])
         ###############################################################    
         
         
@@ -5014,8 +5049,8 @@ class FixedDistances2CDMatrixHolder(DecoratorMatrixHolder):
         
 class FixedDistances2CDTrainMatrixHolder(FixedDistances2CDMatrixHolder):
     
-    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED"):
-        super(FixedDistances2CDTrainMatrixHolder, self).__init__(matrix_holder, k, precomputed_dict)
+    def __init__(self, matrix_holder, k=300, precomputed_dict="NO_PRECOMPUTED", distance='euclidean', one2doc=False):
+        super(FixedDistances2CDTrainMatrixHolder, self).__init__(matrix_holder, k, precomputed_dict, distance, one2doc)
         
     def build_matrix(self):
         #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
@@ -5050,8 +5085,8 @@ class FixedDistances2CDTrainMatrixHolder(FixedDistances2CDMatrixHolder):
     
 class FixedDistances2CDTestMatrixHolder(FixedDistances2CDMatrixHolder):
     
-    def __init__(self, matrix_holder_object, k=300, precomputed_dict="NO_PRECOMPUTED"):
-        super(FixedDistances2CDTestMatrixHolder, self).__init__(matrix_holder_object, k, precomputed_dict)
+    def __init__(self, matrix_holder_object, k=300, precomputed_dict="NO_PRECOMPUTED", distance='euclidean', one2doc=False):
+        super(FixedDistances2CDTestMatrixHolder, self).__init__(matrix_holder_object, k, precomputed_dict, distance, one2doc)
         
     def build_matrix(self):
         #print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
