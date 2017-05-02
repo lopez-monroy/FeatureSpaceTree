@@ -4895,13 +4895,37 @@ class FixedDistances2CDMatrixHolder(DecoratorMatrixHolder):
         
         
         centroids = clusterer.cluster_centers_
-        dist = DistanceMetric.get_metric('euclidean')
-        print self.get_matrix()
-        print "-------------------------------"
-        print centroids
-        matrix_docs_prot = dist.pairwise(self.get_matrix(), centroids) 
-        print "=========================================="
-        print matrix_docs_prot
+        # dist = DistanceMetric.get_metric('euclidean')
+        #dist = DistanceMetric.get_metric(self._distance)
+        #print self.get_matrix()
+        #print "-------------------------------"
+        #print centroids
+        #matrix_docs_prot = dist.pairwise(self.get_matrix(), centroids) 
+        #print "=========================================="
+        #print matrix_docs_prot
+        
+        
+        # Add specific distance or similarity measures.
+        
+        if self._distance == 'euclidean':
+            matrix_docs_prot = metrics.pairwise.euclidean_distances(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids) 
+            #print "=========================================="
+            #print matrix_docs_prot
+        elif self._distance == 'cosine_distance':
+            matrix_docs_prot = metrics.pairwise.cosine_distances(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+        elif self._distance == 'cosine_similarity':
+            matrix_docs_prot = metrics.pairwise.cosine_similarity(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+        elif self._distance == 'rbf':
+            matrix_docs_prot = metrics.pairwise.rbf_kernel(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+        elif self._distance == 'lineal':
+            matrix_docs_prot = metrics.pairwise.linear_kernel(self.get_matrix(), centroids)#dist.pairwise(self.get_matrix(), centroids)
+        else:
+            print "No distance or similarty measure was indicated."
+            sys.exit()
+        print "End of computing distances/similarity."
+        
+        # End of adding specific distance or similarity measures.
+        
                 
         corpus_bow = []    
         i = 0      

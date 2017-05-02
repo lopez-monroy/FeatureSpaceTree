@@ -1,7 +1,7 @@
 FeatureSpaceTree
 ==========
 
-Author: Adrian Pastor Lopez-Monroy, Ph.D. Student, <pastor@ccc.inaoep.mx>
+Author: Adrian Pastor Lopez-Monroy, Ph.D., <pastor@ccc.inaoep.mx>
         Language Technologies Lab,
         Department of Computer Science,
         Instituto Nacional de Astrofísica, Óptica y Electrónica.
