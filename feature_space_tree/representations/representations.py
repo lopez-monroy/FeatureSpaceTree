@@ -362,7 +362,8 @@ class Util(object):
         print attribute_header.get_attributes()
         print "BLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
         return attribute_header
-    
+    # FIXME: The idea of decorate_attribute_header2 was to bind everything with the AbstractFactory.
+    # the decorate_attribute_header is just a temporal decision to avoid many changes cuz of the bad design.
     @staticmethod
     def decorate_attribute_header2(attribute_header, space, kwargs_decorators_matrix_holder):
         
@@ -1789,7 +1790,7 @@ class FactoryDecoratorAttributeHeader(object):
 
     __metaclass__ = ABCMeta
 
-    def build(self,option, kwargs, attribute_header): # all this arguments kwargs and matrix_holder necessaries???
+    def build(self, option, kwargs, attribute_header): # all this arguments kwargs and matrix_holder necessaries???
         option = eval(option)
         return self.create(option, kwargs, attribute_header)
 
@@ -2152,7 +2153,7 @@ class FactoryCSARepresentation(AbstractFactoryRepresentation):
         
         # Decorating --------------------------------------------------
         if 'decorators_matrix' in space.kwargs_space:   
-            self.__csa_attribute_header = Util.decorate_attribute_header2(self.__csa_attribute_header,
+            self.__csa_attribute_header = Util.decorate_attribute_header(self.__csa_attribute_header,
                                                                         space,  
                                                                         space.kwargs_space['decorators_matrix'])
         # Decorating --------------------------------------------------      
@@ -11299,7 +11300,7 @@ class W2VVLADTrainMatrixHolder(W2VVLADMatrixHolder):
         w2v_train_matrix_holder = W2VTrainMatrixHolder(space, train=False) 
       
         w2v = Word2Vec()
-        w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
         w2v_train_matrix_holder.set_w2v(w2v)
           
@@ -11375,7 +11376,7 @@ class W2VVLADTestMatrixHolder(W2VVLADMatrixHolder):
         w2v_train_matrix_holder = W2VTrainMatrixHolder(space, train=False)
               
         w2v = Word2Vec()
-        w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
         w2v_train_matrix_holder.set_w2v(w2v)
           
@@ -11419,6 +11420,11 @@ class W2VMatrixHolder(MatrixHolder):
             self._w2v_txt = self.space.kwargs_space['w2v_txt']
         else:
             self._w2v_txt = "NOT_PROVIDED"
+            
+        if 'w2v_op' in self.space.kwargs_space:
+            self._w2v_op = self.space.kwargs_space['w2v_op']
+        else:
+            self._w2v_op = "NOT_PROVIDED"
     
     def get_attributes(self, space):
         print "NOT NECESSARY YET!!!"
@@ -11726,14 +11732,21 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
         # print self._train_sentences  
         
         if self._w2v_txt == "NOT_PROVIDED":      
+            print "Start TRAINING of w2v file model ..."
             self._train_model = Word2Vec(self._train_sentences, 
                                          size=self.dimensions, 
                                          min_count=self.min_count, 
-                                         workers=self.workers)
-        else:
+                                         workers=self.workers,
+                                         sg=1)
+            print "ENDs TRAINING of w2v file model ..."
+        elif self._w2v_op == "w2v_txt":
             print "Loading w2v file model ..."
             self._train_model = Word2Vec.load_word2vec_format(self._w2v_txt, binary=False)
-            print "End of loading w2v file model ..."   
+            print "End of loading w2v file model ..."  
+        elif self._w2v_op == "w2v_bin_gensim":
+            print "Loading GENSIM w2v file model ..."
+            self._train_model = Word2Vec.load(self._w2v_txt)
+            print "End of loading GENSIM w2v file model ..." 
         
     def build_matrix(self):                
         self.build_naive_representation(self.space,
@@ -11805,8 +11818,8 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
         
         w2v_train_matrix_holder = W2VTrainMatrixHolder(space, train=False) 
       
-        w2v = Word2Vec()
-        w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        #w2v = Word2Vec()
+        w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
         w2v_train_matrix_holder.set_w2v(w2v)
           
@@ -11882,7 +11895,7 @@ class W2VTestMatrixHolder(W2VMatrixHolder):
         w2v_train_matrix_holder = W2VTrainMatrixHolder(space, train=False)
               
         w2v = Word2Vec()
-        w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
         w2v_train_matrix_holder.set_w2v(w2v)
           
@@ -12317,7 +12330,7 @@ class VW2VTrainMatrixHolder(W2VMatrixHolder):
         w2v_train_matrix_holder = VW2VTrainMatrixHolder(space, train=False) 
       
         w2v = Word2Vec()
-        w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
         w2v_train_matrix_holder.set_w2v(w2v)
           
@@ -12393,7 +12406,7 @@ class VW2VTestMatrixHolder(W2VMatrixHolder):
         w2v_train_matrix_holder = VW2VTrainMatrixHolder(space, train=False)
               
         w2v = Word2Vec()
-        w2v = w2v.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
         w2v_train_matrix_holder.set_w2v(w2v)
           
