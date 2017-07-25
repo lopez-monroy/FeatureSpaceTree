@@ -9311,6 +9311,19 @@ class DORMatrixHolder(MatrixHolder):
                           space,
                           virtual_classes_holder,
                           corpus_file_list):
+        
+        # CODE FOR PRELOAD DOR
+        instance_categories = []
+        instance_namefiles = []
+        if self.get_mat_docs_terms() != None:            
+            for autor in space.categories:
+                archivos = virtual_classes_holder[autor].cat_file_list
+                for arch in archivos:
+                    instance_categories += [autor]
+                    instance_namefiles += [arch]
+            self._instance_categories = instance_categories
+            self._instance_namefiles = instance_namefiles
+            return
 
         t1 = time.time()
         print "Starting BOW representation..."
@@ -9631,6 +9644,24 @@ class DORTrainMatrixHolder(DORMatrixHolder):
         super(DORTrainMatrixHolder, self).__init__(space, id2word, tfidf, lsa, dataset_label)
         #self.build_bowcorpus_id2word(self.space, self.space.virtual_classes_holder_train, self.space.corpus_file_list_train)
         #self._id_dataset="train"
+        
+        self.space = space
+        
+        if 'dor_path' in self.space.kwargs_space:
+            self._dor_path = self.space.kwargs_space['dor_path']
+        else:
+            self._dor_path = "NOT_PROVIDED"
+            
+        if 'dor_op' in self.space.kwargs_space:
+            self._dor_op = self.space.kwargs_space['dor_op']
+        else:
+            self._dor_op = "NOT_PROVIDED"
+        
+        if self._dor_path == "NOT_PROVIDED":
+            pass           
+        else:
+            self.set_mat_docs_terms(numpy.load(space.kwargs_space["dor_path"]))
+            print "DOR was loaded."
         
     
     def build_matrix(self):
@@ -11747,6 +11778,9 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
             print "Loading GENSIM w2v file model ..."
             self._train_model = Word2Vec.load(self._w2v_txt)
             print "End of loading GENSIM w2v file model ..." 
+        else:
+            print "You need to specify a w2v_op (e.g., w2v_txt or w2v_bin_gensim)"
+            
         
     def build_matrix(self):                
         self.build_naive_representation(self.space,
