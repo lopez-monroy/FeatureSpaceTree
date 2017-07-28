@@ -2464,7 +2464,7 @@ class FactoryLSARepresentation(AbstractFactoryRepresentation):
 class FactoryTFIDFRepresentation(AbstractFactoryRepresentation):
 
     def create_attribute_header(self, fdist, vocabulary, concepts, space=None):
-        self.__tfidf_attribute_header = AttributeHeaderTFIDF(fdist, vocabulary, space.kwargs_space['concepts'])
+        self.__tfidf_attribute_header = AttributeHeaderTFIDF(fdist, vocabulary, concepts)
         
         # Decorating --------------------------------------------------
         if 'decorators_matrix' in space.kwargs_space:   
@@ -9543,7 +9543,7 @@ class DORMatrixHolder(MatrixHolder):
                         
                         #print "##########################MAT_DOCS_DOCS: " + str(len(matrix_docs_docs[i, :]))
                         
-                        matrix_docs_docs[i, :] += mat_docs_terms[:, unorder_dict_index[pal]] * freq #/tamDoc
+                        matrix_docs_docs[i, :] += mat_docs_terms[:, unorder_dict_index[pal]] #* freq #/tamDoc
                         
                         
                     
@@ -13571,20 +13571,44 @@ class SpaceComposite(SpaceComponent):
 
     def get_categories(self):
         return self.categories
-
+    
     def get_matrix_train(self):
         matrix_train = None
+        
+        for space_component, space_number in zip(self.space_components, range(len(self.space_components))):
+            if (space_number == 0):
+                matrix_train = space_component.get_matrix_train()
+            else:
+                matrix_train = \
+                numpy.c_[matrix_train, space_component.get_matrix_train()]
+            
+        return matrix_train
 
+    def get_matrix_train_old(self):
+        matrix_train = None
+        
         for space_component in self.space_components:
             if (matrix_train == None):
                 matrix_train = space_component.get_matrix_train()
             else:
                 matrix_train = \
                 numpy.c_[matrix_train, space_component.get_matrix_train()]
-
+            
         return matrix_train
-
+    
     def get_matrix_test(self):
+        matrix_test = None
+
+        for space_component, space_number in zip(self.space_components, range(len(self.space_components))):
+            if (space_number == 0):
+                matrix_test = space_component.get_matrix_test()
+            else:
+                matrix_test = \
+                numpy.c_[matrix_test, space_component.get_matrix_test()]
+
+        return matrix_test
+
+    def get_matrix_test_old(self):
         matrix_test = None
 
         for space_component in self.space_components:

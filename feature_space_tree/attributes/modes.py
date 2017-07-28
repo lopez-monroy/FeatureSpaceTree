@@ -46,6 +46,7 @@
 
 import shelve
 import re
+import codecs
 from nltk.corpus.util import LazyCorpusLoader
 from nltk.corpus.reader.plaintext import CategorizedPlaintextCorpusReader
 from nltk.corpus.reader.tagged import CategorizedTaggedCorpusReader
@@ -56,6 +57,7 @@ from postfilter import EmptyByTokenNormalizer
 import prefilter_config
 import postfilter_config
 
+import chardet
 
 class ModeCorpus(object):
 
@@ -86,6 +88,18 @@ class ModeCorpus(object):
                 # terms.kwargs["string"] = \
                 # terms.kwargs["corpus"].raw(fileids=[f_src]).encode('utf-8', 'ignore') # .lower()
                 # print f_src
+                
+                # Begin: transform files to utf-8
+                with open(str(terms.kwargs["corpus"].abspath(f_src)), 'rb') as source_file:
+                    content = source_file.read()
+                    encoding = chardet.detect(content)
+                    
+                content = content.decode(encoding['encoding']).encode('utf-8')
+                content = unicode(content, 'utf-8')
+                with codecs.open(str(terms.kwargs["corpus"].abspath(f_src)), 'w+', encoding='utf-8') as target_file:
+                    target_file.write(content)
+                # End: transform files to utf-8
+                
                 terms.kwargs["string"] = terms.kwargs["corpus"].raw(fileids=[f_src]) # .lower()
 
                 # Apply all RawStringNormalizers -------------------------------
