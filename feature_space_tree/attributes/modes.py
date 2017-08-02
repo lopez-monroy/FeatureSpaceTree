@@ -90,14 +90,14 @@ class ModeCorpus(object):
                 # print f_src
                 
                 # Begin: transform files to utf-8
-                with open(str(terms.kwargs["corpus"].abspath(f_src)), 'rb') as source_file:
-                    content = source_file.read()
-                    encoding = chardet.detect(content)
-                    
-                content = content.decode(encoding['encoding']).encode('utf-8')
-                content = unicode(content, 'utf-8')
-                with codecs.open(str(terms.kwargs["corpus"].abspath(f_src)), 'w+', encoding='utf-8') as target_file:
-                    target_file.write(content)
+#                 with open(str(terms.kwargs["corpus"].abspath(f_src)), 'rb') as source_file:
+#                     content = source_file.read()
+#                     encoding = chardet.detect(content)
+#                     
+#                 content = content.decode(encoding['encoding']).encode('utf-8')
+#                 content = unicode(content, 'utf-8')
+#                 with codecs.open(str(terms.kwargs["corpus"].abspath(f_src)), 'w+', encoding='utf-8') as target_file:
+#                     target_file.write(content)
                 # End: transform files to utf-8
                 
                 terms.kwargs["string"] = terms.kwargs["corpus"].raw(fileids=[f_src]) # .lower()

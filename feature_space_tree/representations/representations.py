@@ -389,12 +389,15 @@ class Util(object):
         match = re.match(user_corpus_path,
                          corpus_path)
         
-        print match.group(1)
-        print files_pattern
+        print corpus_path
+        print "match.group(1): " + match.group(1)
+        print "files_pattern: " + files_pattern
 
         corpus = LazyCorpusLoader(match.group(1),
                                   CategorizedPlaintextCorpusReader,
                                   files_pattern, cat_file=cat_map)
+        
+        print "corpus.fileids(): " + str(len(corpus.fileids()))
         return corpus
 
     @staticmethod
@@ -1010,11 +1013,12 @@ class SpecificFilesCorpus(FilterCorpus):
     def __init__(self, corpus, list_specific_files):
         super(SpecificFilesCorpus, self).__init__(corpus)
         self.list_specific_files = list_specific_files
+        print "self.list_specific_files: " + str(len(self.list_specific_files)) 
 
     def get_docs(self):
 
         old_train_docs = self._corpus.get_docs()
-        # print "DEBUGGING: " + str(old_train_docs)
+        print "DEBUGGING: " + str(len(old_train_docs))
         
         old_train_docs = set(old_train_docs)
         
@@ -9312,18 +9316,18 @@ class DORMatrixHolder(MatrixHolder):
                           virtual_classes_holder,
                           corpus_file_list):
         
-        # CODE FOR PRELOAD DOR
-        instance_categories = []
-        instance_namefiles = []
-        if self.get_mat_docs_terms() != None:            
-            for autor in space.categories:
-                archivos = virtual_classes_holder[autor].cat_file_list
-                for arch in archivos:
-                    instance_categories += [autor]
-                    instance_namefiles += [arch]
-            self._instance_categories = instance_categories
-            self._instance_namefiles = instance_namefiles
-            return
+#         # CODE FOR PRELOAD DOR
+#         instance_categories = []
+#         instance_namefiles = []
+#         if self.get_mat_docs_terms() != None:            
+#             for autor in space.categories:
+#                 archivos = virtual_classes_holder[autor].cat_file_list
+#                 for arch in archivos:
+#                     instance_categories += [autor]
+#                     instance_namefiles += [arch]
+#             self._instance_categories = instance_categories
+#             self._instance_namefiles = instance_namefiles
+#             return
 
         t1 = time.time()
         print "Starting BOW representation..."
@@ -9543,7 +9547,7 @@ class DORMatrixHolder(MatrixHolder):
                         
                         #print "##########################MAT_DOCS_DOCS: " + str(len(matrix_docs_docs[i, :]))
                         
-                        matrix_docs_docs[i, :] += mat_docs_terms[:, unorder_dict_index[pal]] #* freq #/tamDoc
+                        matrix_docs_docs[i, :] += mat_docs_terms[:, unorder_dict_index[pal]] * freq #/tamDoc
                         
                         
                     
