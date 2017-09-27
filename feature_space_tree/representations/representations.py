@@ -70,6 +70,7 @@ from _pyio import __metaclass__
 #from aptsources.distinfo import Template
 from boto.ec2.cloudwatch.dimension import Dimension
 from gensim.models.word2vec import Word2Vec
+from gensim.models import KeyedVectors #gensim.models.KeyedVectors.load_word2vec_format
 from gensim.matutils import Dense2Corpus
 from numpy import transpose
 from nltk.classify.util import log_likelihood
@@ -11764,7 +11765,10 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
             
     def train_w2v(self, sentences):
         
-        # print self._train_sentences  
+        # print self._train_sentences 
+        
+        print "ERROR???????:",self._w2v_txt 
+        print "ERROR2???????:",self._w2v_op 
         
         if self._w2v_txt == "NOT_PROVIDED":      
             print "Start TRAINING of w2v file model ..."
@@ -11776,11 +11780,13 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
             print "ENDs TRAINING of w2v file model ..."
         elif self._w2v_op == "w2v_txt":
             print "Loading w2v file model ..."
-            self._train_model = Word2Vec.load_word2vec_format(self._w2v_txt, binary=False)
+            # self._train_model = Word2Vec.load_word2vec_format(self._w2v_txt, binary=False)
+            self._train_model = KeyedVectors.load_word2vec_format(self._w2v_txt, binary=False)
             print "End of loading w2v file model ..."  
         elif self._w2v_op == "w2v_bin_gensim":
             print "Loading GENSIM w2v file model ..."
-            self._train_model = Word2Vec.load(self._w2v_txt)
+            #self._train_model = Word2Vec.load(self._w2v_txt)
+            self._train_model = KeyedVectors.load_word2vec_format(self._w2v_txt, binary=True)
             print "End of loading GENSIM w2v file model ..." 
         else:
             print "You need to specify a w2v_op (e.g., w2v_txt or w2v_bin_gensim)"
@@ -11857,7 +11863,8 @@ class W2VTrainMatrixHolder(W2VMatrixHolder):
         w2v_train_matrix_holder = W2VTrainMatrixHolder(space, train=False) 
       
         #w2v = Word2Vec()
-        w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        #w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")
+        w2v = KeyedVectors.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
         w2v_train_matrix_holder.set_w2v(w2v)
           
@@ -11933,7 +11940,8 @@ class W2VTestMatrixHolder(W2VMatrixHolder):
         w2v_train_matrix_holder = W2VTrainMatrixHolder(space, train=False)
               
         w2v = Word2Vec()
-        w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
+        #w2v = Word2Vec.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")
+        w2v = KeyedVectors.load(space.space_path + "/w2v/" + space.id_space + "_w2v_model")    
         
         w2v_train_matrix_holder.set_w2v(w2v)
           
@@ -13122,7 +13130,7 @@ class Corpora(object):
 #            match = re.match('.+/\d+_.*_(.*)\.dat', term_corpus_file)
 #            type_corpus = match.group(1)
 
-            shelf = shelve.open(term_corpus_file, protocol=2)
+            shelf = shelve.open(term_corpus_file.replace(".dat", "") + ".dat", protocol=2)
 
             for f in sorted(shelf.keys()):
 
