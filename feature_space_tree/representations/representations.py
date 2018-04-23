@@ -155,6 +155,7 @@ class Util(object):
         if 'corpus_path' in kwargs_corpus and\
         'file_pattern' in kwargs_corpus:
             print "ALL CORPUS OPTIONS."
+                
             corpus = CorpusCategorizedFromCatMap(categories,
                                        kwargs_corpus['corpus_path'],
                                        kwargs_corpus['cat_map'],
@@ -163,7 +164,9 @@ class Util(object):
                                        '(.+)/.+')
             
         else:
-            corpus = CorpusCategorizedFromCatMap(categories, kwargs_corpus['corpus_path'], kwargs_corpus['cat_map'])
+            corpus = CorpusCategorizedFromCatMap(categories, 
+                                                 kwargs_corpus['corpus_path'], 
+                                                 kwargs_corpus['cat_map'])
 
         corpus = Util.decorate_corpus(corpus, kwargs_corpus['filters_corpus'])
         return corpus
@@ -774,6 +777,11 @@ class FactorySimpleFilterCorpus(object):
         if option == EnumFiltersCorpus.SPECIFIC_FILES:
             if 'file_of_specific_paths' in kwargs:
                 specific_file_paths = Util.get_list_of_files(kwargs['file_of_specific_paths'])
+            if 'check_by_cat' in kwargs and kwargs['check_by_cat'] == True:                            
+                specific_file_paths = [specific_file_path 
+                                       for specific_file_path in specific_file_paths
+                                       for category in corpus.get_categories() 
+                                       if category in specific_file_path]
             return SpecificFilesCorpus(corpus, specific_file_paths)
 
         if option == EnumFiltersCorpus.IMBALANCE:
@@ -3763,7 +3771,7 @@ class FixedQuantizedMatrixHolder(DecoratorMatrixHolder):
         
         print "Begining clustering."
         if self._precomputed_dict == "NO_PRECOMPUTED":
-            clusterer = KMeans(n_clusters=k, verbose=1, n_jobs=4)
+            clusterer = KMeans(n_clusters=k, verbose=1, n_jobs=4, random_state=1)
             clusterer.fit(matrix_terms)
         else:
             cache_file = self._precomputed_dict        
@@ -4066,7 +4074,7 @@ class FixedQuantizedTFIDFMatrixHolder(DecoratorMatrixHolder):
         
         print "Begining clustering."
         if self._precomputed_dict == "NO_PRECOMPUTED":
-            clusterer = KMeans(n_clusters=k, verbose=1, n_jobs=4)
+            clusterer = KMeans(n_clusters=k, verbose=1, n_jobs=4, random_state=1)
             clusterer.fit(matrix_terms)
         else:
             cache_file = self._precomputed_dict        
@@ -7575,7 +7583,8 @@ class CSA2TrainMatrixHolder(CSA2MatrixHolder):
             if "KMEANS" == space.kwargs_space["subclassing"]["clusterer"]:        
                 clusterer = KMeans(n_clusters=space.kwargs_space['subclassing']["k"], 
                                    verbose=1, 
-                                   n_jobs=space.kwargs_space["subclassing"]["processors"])
+                                   n_jobs=space.kwargs_space["subclassing"]["processors"],
+                                   random_state=1)
                             
                 target_mat=numpy.transpose(submatrix_concepts_docs)
                 clusterer.fit(target_mat)

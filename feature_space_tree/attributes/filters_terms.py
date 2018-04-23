@@ -281,7 +281,7 @@ class DoubleBiasFreqVocabulary(FilterVocabulary):
         
         # Load the full vocabulary
         old_fdist_selected = \
-        super(BiasFreqVocabulary, self).get_fdist_selected()
+        super(DoubleBiasFreqVocabulary, self).get_fdist_selected()
 
         # Filter the target terms according to double bias. Using min and max.
         new_vocabulary_selected = \
